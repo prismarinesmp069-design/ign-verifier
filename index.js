@@ -251,6 +251,17 @@ async function registerCommands() {
     ];
     
     const rest = new REST({ version: '10' }).setToken(TOKEN);
+    
+    // First delete all existing commands
+    try {
+        const existing = await rest.get(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID));
+        for (const cmd of existing) {
+            await rest.delete(Routes.applicationGuildCommand(CLIENT_ID, GUILD_ID, cmd.id));
+            console.log(`Deleted old command: ${cmd.name}`);
+        }
+    } catch(e) {}
+    
+    // Register new commands
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
     console.log('✅ Commands registered');
 }
@@ -278,6 +289,7 @@ client.once('ready', async () => {
     }
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
+    console.log('📌 Commands may take 1-2 minutes to appear. Type /sendverify in #verify');
 });
 
 client.on('guildMemberAdd', async member => {
