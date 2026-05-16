@@ -56,27 +56,9 @@ if (fs.existsSync(DATA_FILE)) {
 }
 function saveData() { fs.writeFileSync(DATA_FILE, JSON.stringify(db, null, 2)); }
 
-// ==================== ROLE HELPERS ====================
-async function getRole(guild, name, color) {
-    let role = guild.roles.cache.find(r => r.name === name);
-    if (!role) role = await guild.roles.create({ name, color });
-    return role;
-}
-
-async function setupRoles(guild) {
-    const roles = {};
-    roles.verified = await getRole(guild, VERIFIED_ROLE, 0x2ECC71);
-    roles.player = await getRole(guild, PLAYER_ROLE, 0xF1C40F);
-    roles.unverified = await getRole(guild, UNVERIFIED_ROLE, 0x7F8C8D);
-    roles.editions = {};
-    roles.devices = {};
-    roles.regions = {};
-    
-    for (const [key, name] of Object.entries(EDITIONS)) roles.editions[key] = await getRole(guild, name, 0xE67E22);
-    for (const [key, name] of Object.entries(DEVICES)) roles.devices[key] = await getRole(guild, name, 0x3498DB);
-    for (const [key, name] of Object.entries(REGIONS)) roles.regions[key] = await getRole(guild, name, 0xF39C12);
-    
-    return roles;
+// ==================== ROLE HELPERS (NO CREATION) ====================
+async function getRole(guild, name) {
+    return guild.roles.cache.find(r => r.name === name);
 }
 
 // ==================== MOJANG API ====================
@@ -136,9 +118,20 @@ async function showModal(interaction) {
 // ==================== VERIFY MEMBER ====================
 async function verifyMember(member, username, edition, device, region) {
     const guild = member.guild;
-    const roles = await setupRoles(guild);
     
-    if (member.roles.cache.has(roles.verified.id)) {
+    // Get existing roles (NO CREATION)
+    const verifiedRole = await getRole(guild, VERIFIED_ROLE);
+    const playerRole = await getRole(guild, PLAYER_ROLE);
+    const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
+    const editionRole = await getRole(guild, EDITIONS[edition]);
+    const deviceRole = await getRole(guild, DEVICES[device]);
+    const regionRole = await getRole(guild, REGIONS[region]);
+    
+    if (!verifiedRole || !playerRole) {
+        return { success: false, message: '❌ Required roles not found. Please contact staff.' };
+    }
+    
+    if (member.roles.cache.has(verifiedRole.id)) {
         return { success: false, message: '❌ Already verified!' };
     }
     
@@ -176,15 +169,15 @@ async function verifyMember(member, username, edition, device, region) {
     
     try { await member.setNickname(finalUsername); } catch(e) {}
     
-    if (roles.unverified && member.roles.cache.has(roles.unverified.id)) {
-        await member.roles.remove(roles.unverified);
+    if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
+        await member.roles.remove(unverifiedRole);
     }
     
-    await member.roles.add(roles.verified);
-    await member.roles.add(roles.player);
-    await member.roles.add(roles.editions[edition]);
-    await member.roles.add(roles.devices[device]);
-    await member.roles.add(roles.regions[region]);
+    await member.roles.add(verifiedRole);
+    await member.roles.add(playerRole);
+    if (editionRole) await member.roles.add(editionRole);
+    if (deviceRole) await member.roles.add(deviceRole);
+    if (regionRole) await member.roles.add(regionRole);
     
     db.users[member.id] = { username: finalUsername, edition, device, region, verifiedAt: Date.now() };
     db.ignToUser[finalUsername.toLowerCase()] = member.id;
@@ -206,10 +199,7 @@ async function registerCommands() {
         { name: 'help', description: '[Staff] Show commands' },
         { name: 'forceverify', description: '[Staff] Force verify a member', options: [{ name: 'member', type: 6, required: true }] },
         { name: 'unverify', description: '[Staff] Remove verification', options: [{ name: 'member', type: 6, required: true }] },
-        { name: 'checkign', description: '[Staff] Check member IGN', options: [{ name: 'member', type: 6, required: true }] },
-        { name: 'changedevice', description: '[Staff] Change member device', options: [{ name: 'member', type: 6, required: true }, { name: 'device', type: 3, required: true, choices: Object.entries(DEVICES).map(([val, name]) => ({ name, value: val })) }] },
-        { name: 'changeregion', description: '[Staff] Change member region', options: [{ name: 'member', type: 6, required: true }, { name: 'region', type: 3, required: true, choices: Object.entries(REGIONS).map(([val, name]) => ({ name, value: val })) }] },
-        { name: 'changeedition', description: '[Staff] Change member edition', options: [{ name: 'member', type: 6, required: true }, { name: 'edition', type: 3, required: true, choices: Object.entries(EDITIONS).map(([val, name]) => ({ name, value: val })) }] }
+        { name: 'checkign', description: '[Staff] Check member IGN', options: [{ name: 'member', type: 6, required: true }] }
     ];
     
     const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -240,16 +230,15 @@ client.once('ready', async () => {
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return console.error('❌ Guild not found!');
     
-    await setupRoles(guild);
     await registerCommands();
     
-    const roles = await setupRoles(guild);
+    const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
     const members = await guild.members.fetch();
     let count = 0;
     for (const member of members.values()) {
         if (member.user.bot) continue;
-        if (!member.roles.cache.has(roles.verified.id) && !member.roles.cache.has(roles.unverified.id)) {
-            await member.roles.add(roles.unverified);
+        if (unverifiedRole && !member.roles.cache.has(unverifiedRole.id)) {
+            await member.roles.add(unverifiedRole);
             count++;
         }
     }
@@ -260,8 +249,8 @@ client.once('ready', async () => {
 client.on('interactionCreate', async interaction => {
     // BUTTON
     if (interaction.isButton() && interaction.customId === 'verify_btn') {
-        const roles = await setupRoles(interaction.guild);
-        if (interaction.member.roles.cache.has(roles.verified.id)) {
+        const verifiedRole = await getRole(interaction.guild, VERIFIED_ROLE);
+        if (verifiedRole && interaction.member.roles.cache.has(verifiedRole.id)) {
             return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
         }
         await showModal(interaction);
@@ -299,12 +288,12 @@ client.on('interactionCreate', async interaction => {
     }
     else if (commandName === 'notify' && isStaff) {
         await interaction.reply({ content: '📨 Sending reminders...', ephemeral: true });
-        const roles = await setupRoles(guild);
+        const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
         const members = await guild.members.fetch();
         let count = 0;
         for (const m of members.values()) {
             if (m.user.bot) continue;
-            if (!m.roles.cache.has(roles.verified.id) && m.roles.cache.has(roles.unverified.id)) {
+            if (unverifiedRole && m.roles.cache.has(unverifiedRole.id)) {
                 try { await m.send(`**🔐 Verification Required**\nClick the button in #${VERIFY_CHANNEL} to verify.`); count++; } catch(e) {}
                 await new Promise(r => setTimeout(r, 500));
             }
@@ -312,7 +301,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply({ content: `✅ Sent reminders to ${count} members.` });
     }
     else if (commandName === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/verify** - Open verification\n**/sendverify** - Send button\n**/notify** - Remind unverified\n**/forceverify @user** - Force verify\n**/unverify @user** - Remove verification\n**/checkign @user** - Check IGN\n**/changedevice @user device** - Change device\n**/changeregion @user region** - Change region\n**/changeedition @user edition** - Change edition`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/verify** - Open verification\n**/sendverify** - Send button\n**/notify** - Remind unverified\n**/forceverify @user** - Force verify\n**/unverify @user** - Remove verification\n**/checkign @user** - Check IGN`;
         await interaction.reply({ content: helpText, ephemeral: true });
     }
     else if (commandName === 'forceverify' && isStaff) {
@@ -320,16 +309,31 @@ client.on('interactionCreate', async interaction => {
     }
     else if (commandName === 'unverify' && isStaff) {
         const target = options.getMember('member');
-        const roles = await setupRoles(guild);
-        if (!target.roles.cache.has(roles.verified.id)) return interaction.reply({ content: '❌ Not verified.', ephemeral: true });
+        const verifiedRole = await getRole(guild, VERIFIED_ROLE);
+        const playerRole = await getRole(guild, PLAYER_ROLE);
+        const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
         
-        await target.roles.remove(roles.verified);
-        await target.roles.remove(roles.player);
-        if (roles.unverified) await target.roles.add(roles.unverified);
+        if (!verifiedRole || !target.roles.cache.has(verifiedRole.id)) {
+            return interaction.reply({ content: '❌ Not verified.', ephemeral: true });
+        }
         
-        for (const role of Object.values(roles.editions)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
-        for (const role of Object.values(roles.devices)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
-        for (const role of Object.values(roles.regions)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
+        await target.roles.remove(verifiedRole);
+        if (playerRole) await target.roles.remove(playerRole);
+        if (unverifiedRole) await target.roles.add(unverifiedRole);
+        
+        // Remove edition/device/region roles
+        for (const [key, name] of Object.entries(EDITIONS)) {
+            const role = await getRole(guild, name);
+            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
+        }
+        for (const [key, name] of Object.entries(DEVICES)) {
+            const role = await getRole(guild, name);
+            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
+        }
+        for (const [key, name] of Object.entries(REGIONS)) {
+            const role = await getRole(guild, name);
+            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
+        }
         
         try { await target.setNickname(null); } catch(e) {}
         
@@ -349,46 +353,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.reply({ content: `${target.user.tag} not verified.`, ephemeral: true });
         }
     }
-    else if (commandName === 'changedevice' && isStaff) {
-        const target = options.getMember('member');
-        const newDevice = options.getString('device');
-        const roles = await setupRoles(guild);
-        const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Not verified.', ephemeral: true });
-        
-        for (const role of Object.values(roles.devices)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
-        await target.roles.add(roles.devices[newDevice]);
-        data.device = newDevice;
-        saveData();
-        await interaction.reply({ content: `✅ Changed device to ${DEVICES[newDevice]}`, ephemeral: true });
-    }
-    else if (commandName === 'changeregion' && isStaff) {
-        const target = options.getMember('member');
-        const newRegion = options.getString('region');
-        const roles = await setupRoles(guild);
-        const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Not verified.', ephemeral: true });
-        
-        for (const role of Object.values(roles.regions)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
-        await target.roles.add(roles.regions[newRegion]);
-        data.region = newRegion;
-        saveData();
-        await interaction.reply({ content: `✅ Changed region to ${REGIONS[newRegion]}`, ephemeral: true });
-    }
-    else if (commandName === 'changeedition' && isStaff) {
-        const target = options.getMember('member');
-        const newEdition = options.getString('edition');
-        const roles = await setupRoles(guild);
-        const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Not verified.', ephemeral: true });
-        
-        for (const role of Object.values(roles.editions)) if (target.roles.cache.has(role.id)) await target.roles.remove(role);
-        await target.roles.add(roles.editions[newEdition]);
-        data.edition = newEdition;
-        saveData();
-        await interaction.reply({ content: `✅ Changed edition to ${EDITIONS[newEdition]}`, ephemeral: true });
-    }
-    else if (!isStaff && ['sendverify', 'notify', 'forceverify', 'unverify', 'checkign', 'changedevice', 'changeregion', 'changeedition', 'help'].includes(commandName)) {
+    else if (!isStaff && ['sendverify', 'notify', 'forceverify', 'unverify', 'checkign', 'help'].includes(commandName)) {
         await interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
     }
 });
