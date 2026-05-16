@@ -50,7 +50,7 @@ const REGIONS = {
 };
 
 // ==================== DATABASE ====================
-let db = { users: {}, ignToUser: {}, lastReminder: {} };
+let db = { users: {}, ignToUser: {}, lastReminder: {}, staffNicks: {} };
 const DATA_FILE = 'verify.json';
 if (fs.existsSync(DATA_FILE)) {
     try { db = JSON.parse(fs.readFileSync(DATA_FILE)); } catch(e) {}
@@ -189,7 +189,7 @@ async function verifyMember(member, username, edition, device, region) {
         logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
     }
     
-    // ==================== WELCOME MESSAGE (UPDATED) ====================
+    // ==================== WELCOME MESSAGE ====================
     try {
         const welcomeEmbed = new EmbedBuilder()
             .setColor(0x2ECC71)
@@ -222,7 +222,7 @@ async function verifyMember(member, username, edition, device, region) {
     return { success: true, message: `✅ Verified as **${finalUsername}**!` };
 }
 
-// ==================== SEND BUTTON (PROFESSIONAL WITH SERVER ICON) ====================
+// ==================== SEND BUTTON ====================
 async function sendVerifyButton(channel) {
     const guild = channel.guild;
     const serverIcon = guild.iconURL({ dynamic: true, size: 256 });
@@ -323,7 +323,7 @@ client.once('ready', async () => {
     }
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
-    console.log(`📌 Commands: ${PREFIX}verify, ${PREFIX}sendverify, ${PREFIX}notify, ${PREFIX}help`);
+    console.log(`📌 Commands: ${PREFIX}sendverify, ${PREFIX}notify, ${PREFIX}help, ${PREFIX}setadmin, ${PREFIX}setmod, ${PREFIX}setjrmod, ${PREFIX}sethelper, ${PREFIX}setcreator, ${PREFIX}removestaffnick`);
 });
 
 client.on('guildMemberAdd', async member => {
@@ -362,7 +362,7 @@ client.on('messageCreate', async message => {
     
     // !help
     else if (command === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set 🛡️ ADMIN nickname\n**${PREFIX}setmod @user** - Set 🔨 MODERATOR nickname\n**${PREFIX}setjrmod @user** - Set 🪖 JR MODERATOR nickname\n**${PREFIX}sethelper @user** - Set 🤝 HELPER nickname\n**${PREFIX}setcreator @user** - Set 🎥 CREATOR nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
         await message.reply(helpText);
     }
     
@@ -507,7 +507,7 @@ client.on('messageCreate', async message => {
         await message.reply(`✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`);
     }
     
-    // !changeign - NEW COMMAND
+    // !changeign
     else if (command === 'changeign' && isStaff) {
         const target = message.mentions.members.first();
         const newIgn = args[1];
@@ -518,7 +518,6 @@ client.on('messageCreate', async message => {
         const data = db.users[target.id];
         if (!data) return message.reply('❌ Member not verified.');
         
-        // Validate new IGN (allow spaces)
         if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(newIgn)) {
             return message.reply('❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.');
         }
@@ -526,18 +525,15 @@ client.on('messageCreate', async message => {
         const oldIgn = data.username;
         const oldIgnLower = oldIgn.toLowerCase();
         
-        // Check if new IGN is already taken by another member
         if (db.ignToUser[newIgn.toLowerCase()] && db.ignToUser[newIgn.toLowerCase()] !== target.id) {
             return message.reply('❌ This username is already verified by another member.');
         }
         
-        // Update database
         delete db.ignToUser[oldIgnLower];
         db.ignToUser[newIgn.toLowerCase()] = target.id;
         data.username = newIgn;
         saveData();
         
-        // Change nickname in Discord
         try {
             await target.setNickname(newIgn);
             await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${newIgn}**`);
@@ -547,13 +543,151 @@ client.on('messageCreate', async message => {
                 logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${newIgn}`);
             }
             
-            // Notify the user
             try {
                 await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${newIgn}\n\nYour nickname has been updated accordingly.`);
             } catch(e) {}
             
         } catch(e) {
             await message.reply(`✅ Database updated but failed to change nickname: ${e.message}`);
+        }
+    }
+    
+    // ==================== STAFF NICKNAME COMMANDS ====================
+    
+    // !setadmin @user
+    else if (command === 'setadmin' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const newNick = `🛡️ ADMIN • ${cleanName}`;
+        
+        try {
+            await target.setNickname(newNick);
+            await message.reply(`✅ Set ${target.user.tag}'s nickname to **${newNick}**`);
+            
+            db.staffNicks[target.id] = { role: 'ADMIN', nickname: newNick };
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** set ${target.user.tag}'s staff nickname to ${newNick}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
+        }
+    }
+    
+    // !setmod @user
+    else if (command === 'setmod' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const newNick = `🔨 MODERATOR • ${cleanName}`;
+        
+        try {
+            await target.setNickname(newNick);
+            await message.reply(`✅ Set ${target.user.tag}'s nickname to **${newNick}**`);
+            
+            db.staffNicks[target.id] = { role: 'MODERATOR', nickname: newNick };
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** set ${target.user.tag}'s staff nickname to ${newNick}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
+        }
+    }
+    
+    // !setjrmod @user
+    else if (command === 'setjrmod' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const newNick = `🪖 JR MODERATOR • ${cleanName}`;
+        
+        try {
+            await target.setNickname(newNick);
+            await message.reply(`✅ Set ${target.user.tag}'s nickname to **${newNick}**`);
+            
+            db.staffNicks[target.id] = { role: 'JR_MODERATOR', nickname: newNick };
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** set ${target.user.tag}'s staff nickname to ${newNick}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
+        }
+    }
+    
+    // !sethelper @user
+    else if (command === 'sethelper' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const newNick = `🤝 HELPER • ${cleanName}`;
+        
+        try {
+            await target.setNickname(newNick);
+            await message.reply(`✅ Set ${target.user.tag}'s nickname to **${newNick}**`);
+            
+            db.staffNicks[target.id] = { role: 'HELPER', nickname: newNick };
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** set ${target.user.tag}'s staff nickname to ${newNick}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
+        }
+    }
+    
+    // !setcreator @user
+    else if (command === 'setcreator' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const newNick = `🎥 CREATOR • ${cleanName}`;
+        
+        try {
+            await target.setNickname(newNick);
+            await message.reply(`✅ Set ${target.user.tag}'s nickname to **${newNick}**`);
+            
+            db.staffNicks[target.id] = { role: 'CREATOR', nickname: newNick };
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** set ${target.user.tag}'s staff nickname to ${newNick}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
+        }
+    }
+    
+    // !removestaffnick @user
+    else if (command === 'removestaffnick' && isStaff) {
+        const target = message.mentions.members.first();
+        if (!target) return message.reply('❌ Please mention a user.');
+        
+        const currentNick = target.displayName;
+        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        
+        try {
+            await target.setNickname(cleanName);
+            await message.reply(`✅ Removed staff nickname from ${target.user.tag}, reverted to **${cleanName}**`);
+            
+            if (db.staffNicks) delete db.staffNicks[target.id];
+            saveData();
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) logChannel.send(`🛠️ **${message.author.tag}** removed staff nickname from ${target.user.tag}`);
+        } catch(e) {
+            await message.reply(`❌ Failed: ${e.message}`);
         }
     }
 });
