@@ -507,55 +507,6 @@ client.on('messageCreate', async message => {
         await message.reply(`✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`);
     }
 });
-     // !changeign @user newign
-else if (command === 'changeign' && isStaff) {
-    const target = message.mentions.members.first();
-    const newIgn = args[1];
-    
-    if (!target) return message.reply('❌ Please mention a user to change IGN.');
-    if (!newIgn) return message.reply('❌ Please provide the new Minecraft username.');
-    
-    const data = db.users[target.id];
-    if (!data) return message.reply('❌ Member not verified.');
-    
-    // Validate new IGN (allow spaces)
-    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(newIgn)) {
-        return message.reply('❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.');
-    }
-    
-    const oldIgn = data.username;
-    const oldIgnLower = oldIgn.toLowerCase();
-    
-    // Check if new IGN is already taken by another member
-    if (db.ignToUser[newIgn.toLowerCase()] && db.ignToUser[newIgn.toLowerCase()] !== target.id) {
-        return message.reply('❌ This username is already verified by another member.');
-    }
-    
-    // Update database
-    delete db.ignToUser[oldIgnLower];
-    db.ignToUser[newIgn.toLowerCase()] = target.id;
-    data.username = newIgn;
-    saveData();
-    
-    // Change nickname in Discord
-    try {
-        await target.setNickname(newIgn);
-        await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${newIgn}**`);
-        
-        const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
-        if (logChannel) {
-            logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${newIgn}`);
-        }
-        
-        // Notify the user
-        try {
-            await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${newIgn}\n\nYour nickname has been updated accordingly.`);
-        } catch(e) {}
-        
-    } catch(e) {
-        await message.reply(`✅ Database updated but failed to change nickname: ${e.message}`);
-    }
-}
 
 // ==================== BUTTON HANDLER ====================
 client.on('interactionCreate', async interaction => {
