@@ -186,11 +186,37 @@ async function verifyMember(member, username, edition, device, region) {
     
     const logChannel = guild.channels.cache.find(c => c.name === LOG_CHANNEL);
     if (logChannel) {
-        logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}**`);
+        logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
     }
     
+    // ==================== WELCOME MESSAGE (UPDATED) ====================
     try {
-        await member.send(`✅ **Welcome!** Verified as **${finalUsername}**`);
+        const welcomeEmbed = new EmbedBuilder()
+            .setColor(0x2ECC71)
+            .setAuthor({ name: guild.name, iconURL: guild.iconURL() })
+            .setTitle('🎉 VERIFICATION SUCCESSFUL!')
+            .setDescription([
+                `**Welcome aboard, ${member.user.username}!**`,
+                '',
+                'Your Minecraft account has been successfully verified.',
+                '',
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                '**📋 YOUR INFORMATION**',
+                `✦ **Username:** \`${finalUsername}\``,
+                `✦ **Edition:** ${EDITIONS[edition]}`,
+                `✦ **Device:** ${DEVICES[device]}`,
+                `✦ **Region:** ${REGIONS[region]}`,
+                '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+                '',
+                '✅ You now have access to all channels',
+                '⚔️ You received the `✅ Verified` and `⚔️ Player` roles',
+                '',
+                '**Enjoy your time in the server!** 🎮'
+            ].join('\n'))
+            .setFooter({ text: 'Thank you for verifying your account' })
+            .setTimestamp();
+        
+        await member.send({ embeds: [welcomeEmbed] });
     } catch(e) {}
     
     return { success: true, message: `✅ Verified as **${finalUsername}**!` };
