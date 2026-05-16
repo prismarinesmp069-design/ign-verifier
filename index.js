@@ -85,7 +85,7 @@ async function showVerificationModal(interaction, targetId = null) {
         .setLabel('Minecraft Username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your Minecraft           username');
+        .setPlaceholder('Enter your Minecraft username (spaces allowed)');
     
     const editionInput = new TextInputBuilder()
         .setCustomId('edition')
@@ -137,7 +137,6 @@ async function verifyMember(member, username, edition, device, region, isForce =
         return { success: false, message: '❌ Already verified!' };
     }
     
-    // ALLOW SPACES for Bedrock usernames
     if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
         return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
     }
@@ -245,6 +244,7 @@ async function registerCommands() {
     const commands = [
         { name: 'sendverify', description: '[Staff] Send verification button' },
         { name: 'notify', description: '[Staff] Send reminder to unverified members' },
+        { name: 'refresh', description: '[Staff] Refresh bot commands' },
         { name: 'help', description: '[Staff] Show all commands' },
         { name: 'stats', description: '[Staff] Show verification stats' },
         { name: 'forceverify', description: '[Staff] Force verify a member', options: [{ name: 'member', type: 6, required: true }] },
@@ -292,6 +292,7 @@ client.once('ready', async () => {
     
     console.log(`✅ Ready | Gave unverified to ${count} members`);
     console.log('📌 Use /sendverify in #verify');
+    console.log('📌 Use /refresh if commands are missing');
 });
 
 client.on('guildMemberAdd', async member => {
@@ -349,8 +350,13 @@ client.on('interactionCreate', async interaction => {
     else if (commandName === 'notify') {
         await notifyUnverified(guild, interaction);
     }
+    else if (commandName === 'refresh') {
+        await interaction.reply({ content: '🔄 Refreshing commands...', flags: 64 });
+        await registerCommands();
+        await interaction.editReply({ content: '✅ Commands refreshed! They will appear in a few minutes.' });
+    }
     else if (commandName === 'help') {
-        const helpText = `**📋 STAFF COMMANDS**\n/sendverify - Send button\n/notify - Remind unverified\n/stats - Show stats\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition`;
+        const helpText = `**📋 STAFF COMMANDS**\n/sendverify - Send button\n/notify - Remind unverified\n/refresh - Refresh commands\n/stats - Show stats\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition`;
         await interaction.reply({ content: helpText, flags: 64 });
     }
     else if (commandName === 'stats') {
