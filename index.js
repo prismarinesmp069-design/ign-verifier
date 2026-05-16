@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, PermissionsBitField, Partials } = require('discord.js');
+const { Client, GatewayIntentBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder, PermissionsBitField, Partials } = require('discord.js');
 const fs = require('fs').promises;
 const express = require('express');
 const fetch = require('node-fetch');
@@ -97,7 +97,7 @@ async function setupRoles(guild) {
     return roles;
 }
 
-// ==================== API CHECK ====================
+// ==================== API CHECKS ====================
 async function checkJavaUsername(username) {
     try {
         const res = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);
@@ -105,6 +105,14 @@ async function checkJavaUsername(username) {
         const data = await res.json();
         return data.name;
     } catch(e) { return null; }
+}
+
+async function checkBedrockUsername(username) {
+    // Basic validation for Bedrock
+    if (/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
+        return username;
+    }
+    return null;
 }
 
 // ==================== MODAL ====================
@@ -150,7 +158,6 @@ async function showVerificationModal(interaction, targetMember = null) {
         new ActionRowBuilder().addComponents(regionInput)
     );
     
-    // DIRECT response - NO defer before modal!
     await interaction.showModal(modal);
 }
 
@@ -193,6 +200,11 @@ async function verifyMember(member, username, edition, device, region) {
             return { success: false, message: '❌ Java username does not exist on Mojang.' };
         }
         finalUsername = mojangName;
+    } else {
+        const bedrockName = await checkBedrockUsername(username);
+        if (!bedrockName) {
+            return { success: false, message: '❌ Invalid Bedrock username. Use 3-16 letters, numbers, underscores, or spaces.' };
+        }
     }
     
     try { await member.setNickname(finalUsername); } catch(e) {}
@@ -212,35 +224,17 @@ async function verifyMember(member, username, edition, device, region) {
     await saveDB();
     
     try {
-        await member.send(`✅ **Welcome!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}`);
+        await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
     } catch(e) {}
     
-    return { success: true, message: `✅ Verified as **${finalUsername}**!` };
-}
-
-// ==================== SEND VERIFY BUTTON ====================
-async function sendVerifyButton(channel) {
-    const embed = new EmbedBuilder()
-        .setTitle('🔐 MINECRAFT VERIFICATION')
-        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (java / bedrock)\n• Your device\n• Your region')
-        .setColor(0x2ECC71)
-        .setFooter({ text: 'Verification is required to access the server' });
-    
-    const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-            .setCustomId('verify_btn')
-            .setLabel('✅ VERIFY NOW')
-            .setStyle(ButtonStyle.Success)
-    );
-    
-    const msg = await channel.send({ embeds: [embed], components: [row] });
-    await msg.pin().catch(() => {});
+    return { success: true, message: `✅ Verified as **${finalUsername}**!\n━━━━━━━━━━━━━━━━━━━━\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}` };
 }
 
 // ==================== COMMANDS ====================
 async function registerCommands() {
     const commands = [
-        { name: 'sendverify', description: '[Staff] Send verification button' },
+        { name: 'verify', description: 'Verify your Minecraft account' },
+        { name: 'verifyinfo', description: 'Show verification instructions' },
         { name: 'notify', description: '[Staff] Send reminder to unverified members' },
         { name: 'help', description: '[Staff] Show all commands' },
         { name: 'forceverify', description: '[Staff] Force verify a member', options: [{ name: 'member', type: 6, required: true }] },
@@ -254,6 +248,23 @@ async function registerCommands() {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
     console.log('✅ Commands registered');
+}
+
+// ==================== SEND VERIFY INFO EMBED ====================
+async function sendVerifyInfo(channel) {
+    const embed = new EmbedBuilder()
+        .setTitle('🔐 MINECRAFT ACCOUNT VERIFICATION')
+        .setDescription('To access the server, you must verify your Minecraft account.')
+        .setColor(0x2ECC71)
+        .addFields(
+            { name: '📝 How to Verify', value: 'Type `/verify` in this channel and fill out the form.', inline: false },
+            { name: '📋 What You Need', value: '• Your Minecraft username\n• Your game edition (Java/Bedrock)\n• Your device\n• Your region', inline: false },
+            { name: '✅ After Verification', value: 'You will receive the `✅ Verified` role and gain access to all channels.', inline: false },
+            { name: '❓ Need Help?', value: 'Contact a staff member if you have issues.', inline: false }
+        )
+        .setFooter({ text: 'Verification is required to prevent spam and ensure account ownership' });
+    
+    await channel.send({ embeds: [embed] });
 }
 
 // ==================== READY EVENT ====================
@@ -291,20 +302,6 @@ client.on('guildMemberAdd', async member => {
 
 // ==================== INTERACTION HANDLER ====================
 client.on('interactionCreate', async interaction => {
-    // BUTTON HANDLER - NO DEFER HERE!
-    if (interaction.isButton() && interaction.customId === 'verify_btn') {
-        console.log(`🔘 ${interaction.user.tag} clicked verify button`);
-        
-        const roles = await setupRoles(interaction.guild);
-        if (interaction.member.roles.cache.has(roles.verified.id)) {
-            return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
-        }
-        
-        // DIRECT modal - no defer!
-        await showVerificationModal(interaction);
-        return;
-    }
-    
     // MODAL HANDLER
     if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal:')) {
         console.log(`📝 ${interaction.user.tag} submitted verification`);
@@ -333,19 +330,29 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
     
-    if (!isStaff && commandName !== 'sendverify') {
-        return interaction.reply({ content: '❌ Staff only.', ephemeral: true });
+    // /verify command (anyone can use)
+    if (commandName === 'verify') {
+        const roles = await setupRoles(guild);
+        if (member.roles.cache.has(roles.verified.id)) {
+            return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
+        }
+        await showVerificationModal(interaction);
+        return;
     }
     
-    if (commandName === 'sendverify') {
-        if (channel.name !== VERIFY_CHANNEL) {
-            return interaction.reply({ content: `❌ Use in #${VERIFY_CHANNEL}`, ephemeral: true });
-        }
-        await interaction.deferReply({ ephemeral: true });
-        await sendVerifyButton(channel);
-        await interaction.editReply({ content: '✅ Verification button sent!' });
+    // /verifyinfo command (anyone can use)
+    if (commandName === 'verifyinfo') {
+        await sendVerifyInfo(channel);
+        await interaction.reply({ content: '✅ Verification info sent!', ephemeral: true });
+        return;
     }
-    else if (commandName === 'notify') {
+    
+    // Staff only commands from here
+    if (!isStaff) {
+        return interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
+    }
+    
+    if (commandName === 'notify') {
         await interaction.reply({ content: '📨 Sending reminders...', ephemeral: true });
         const roles = await setupRoles(guild);
         const members = await guild.members.fetch();
@@ -353,14 +360,14 @@ client.on('interactionCreate', async interaction => {
         for (const m of members.values()) {
             if (m.user.bot) continue;
             if (!m.roles.cache.has(roles.verified.id) && m.roles.cache.has(roles.unverified.id)) {
-                try { await m.send(`**🔐 Verification Required**\nClick the button in #${VERIFY_CHANNEL}.`); count++; } catch(e) {}
+                try { await m.send(`**🔐 Verification Required**\nType \`/verify\` in #${VERIFY_CHANNEL} to verify your Minecraft account.`); count++; } catch(e) {}
                 await new Promise(r => setTimeout(r, 500));
             }
         }
-        await interaction.editReply({ content: `✅ Sent to ${count} members.` });
+        await interaction.editReply({ content: `✅ Sent reminders to ${count} members.` });
     }
     else if (commandName === 'help') {
-        const helpText = `**📋 STAFF COMMANDS**\n/sendverify - Send button\n/notify - Remind unverified\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/verifyinfo** - Send verification instructions\n**/notify** - Send reminder to unverified members\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member's IGN\n**/changedevice @user device** - Change member's device\n**/changeregion @user region** - Change member's region\n**/changeedition @user edition** - Change member's edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** ${Object.values(DEVICES).join(', ')}\n**Regions:** ${Object.values(REGIONS).join(', ')}\n**Editions:** ${Object.values(EDITIONS).join(', ')}`;
         await interaction.reply({ content: helpText, ephemeral: true });
     }
     else if (commandName === 'forceverify') {
@@ -393,9 +400,9 @@ client.on('interactionCreate', async interaction => {
         const target = options.getMember('member');
         const data = db.users[target.id];
         if (data) {
-            await interaction.reply({ content: `**${target.user.tag}**\nIGN: ${data.username}\nEdition: ${EDITIONS[data.edition]}\nDevice: ${DEVICES[data.device]}\nRegion: ${REGIONS[data.region]}`, ephemeral: true });
+            await interaction.reply({ content: `**${target.user.tag}**\n━━━━━━━━━━━━━━━━━━━━\n**IGN:** ${data.username}\n**Edition:** ${EDITIONS[data.edition]}\n**Device:** ${DEVICES[data.device]}\n**Region:** ${REGIONS[data.region]}\n**Verified:** ${new Date(data.verifiedAt).toLocaleString()}`, ephemeral: true });
         } else {
-            await interaction.reply({ content: `${target.user.tag} not verified.`, ephemeral: true });
+            await interaction.reply({ content: `${target.user.tag} is not verified.`, ephemeral: true });
         }
     }
     else if (commandName === 'changedevice') {
@@ -409,7 +416,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.devices[newDevice]);
         data.device = newDevice;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed device to ${DEVICES[newDevice]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s device to ${DEVICES[newDevice]}`, ephemeral: true });
     }
     else if (commandName === 'changeregion') {
         const target = options.getMember('member');
@@ -422,7 +429,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.regions[newRegion]);
         data.region = newRegion;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed region to ${REGIONS[newRegion]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s region to ${REGIONS[newRegion]}`, ephemeral: true });
     }
     else if (commandName === 'changeedition') {
         const target = options.getMember('member');
@@ -435,7 +442,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.editions[newEdition]);
         data.edition = newEdition;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed edition to ${EDITIONS[newEdition]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`, ephemeral: true });
     }
 });
 
