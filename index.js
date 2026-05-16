@@ -259,7 +259,6 @@ async function sendReminders(guild) {
 async function registerCommands() {
     const commands = [
         { name: 'sendverify', description: '[Staff] Send verification button' },
-        { name: 'refresh', description: '[Staff] Refresh bot commands' },
         { name: 'notify', description: '[Staff] Send reminder to unverified members' },
         { name: 'help', description: '[Staff] Show all commands' },
         { name: 'stats', description: '[Staff] Show verification stats' },
@@ -357,7 +356,7 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
     
-    if (!isStaff && commandName !== 'sendverify' && commandName !== 'refresh') {
+    if (!isStaff && commandName !== 'sendverify') {
         return interaction.reply({ content: '❌ Staff only command.', flags: 64 });
     }
     
@@ -368,13 +367,6 @@ client.on('interactionCreate', async interaction => {
         }
         await sendVerifyButton(channel);
         await interaction.reply({ content: '✅ Verification button sent!', flags: 64 });
-    }
-    
-    // /refresh - NEW COMMAND
-    else if (commandName === 'refresh') {
-        await interaction.reply({ content: '🔄 Refreshing commands...', flags: 64 });
-        await registerCommands();
-        await interaction.editReply({ content: '✅ Commands refreshed! They will appear in a few minutes.' });
     }
     
     // /notify
@@ -395,7 +387,7 @@ client.on('interactionCreate', async interaction => {
     
     // /help
     else if (commandName === 'help') {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/sendverify** - Send verification button\n**/refresh** - Refresh bot commands\n**/notify** - DM reminder to unverified\n**/stats** - Show verification stats\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member IGN\n**/changedevice @user device** - Change device\n**/changeregion @user region** - Change region\n**/changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/sendverify** - Send verification button\n**/notify** - DM reminder to unverified\n**/stats** - Show verification stats\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member IGN\n**/changedevice @user device** - Change device\n**/changeregion @user region** - Change region\n**/changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
         await interaction.reply({ content: helpText, flags: 64 });
     }
     
