@@ -17,13 +17,12 @@ const GUILD_ID = process.env.IGN_GUILD_ID;
 
 // ==================== CONFIGURATION ====================
 const VERIFIED_ROLE_NAME = '✅ Verified';
-const PLAYER_ROLE_NAME = 'Player ⚔️';
+const PLAYER_ROLE_NAME = '⚔️ Player';
 const UNVERIFIED_ROLE_NAME = '☘️ Unverified';
 const VERIFY_CHANNEL_NAME = 'verify';
 const LOG_CHANNEL_NAME = 'logs';
 const REMINDER_INTERVAL_MS = 30 * 60 * 1000;
 
-// Role definitions
 const EDITION_ROLES = {
     'java': { name: '☕ Java Edition', emoji: '☕', color: 0xE67E22 },
     'bedrock': { name: '🟩 Bedrock Edition', emoji: '🟩', color: 0x2ECC71 }
@@ -76,7 +75,7 @@ async function checkJavaUsername(username) {
 }
 
 async function checkBedrockUsername(username) {
-    if (!/^[a-zA-Z0-9 ]{3,16}$/.test(username)) return null;
+    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) return null;
     return { name: username, valid: true };
 }
 
@@ -120,59 +119,14 @@ async function setupRoles(guild) {
 // ==================== COMMAND REGISTRATION ====================
 async function registerCommands() {
     const commands = [
-        {
-            name: 'sendverify',
-            description: '[Staff] Send verification button message'
-        },
-        {
-            name: 'help',
-            description: '[Staff] Show all commands'
-        },
-        {
-            name: 'forceverify',
-            description: '[Staff] Force verify a member',
-            options: [
-                { name: 'member', type: 6, description: 'Member to verify', required: true }
-            ]
-        },
-        {
-            name: 'unverify',
-            description: '[Staff] Remove verification',
-            options: [
-                { name: 'member', type: 6, description: 'Member to unverify', required: true }
-            ]
-        },
-        {
-            name: 'checkign',
-            description: '[Staff] Check member IGN',
-            options: [
-                { name: 'member', type: 6, description: 'Member to check', required: true }
-            ]
-        },
-        {
-            name: 'changedevice',
-            description: '[Staff] Change member device',
-            options: [
-                { name: 'member', type: 6, description: 'Member to change', required: true },
-                { name: 'device', type: 3, description: 'New device', required: true, choices: Object.keys(DEVICE_ROLES).map(d => ({ name: DEVICE_ROLES[d].name, value: d })) }
-            ]
-        },
-        {
-            name: 'changeregion',
-            description: '[Staff] Change member region',
-            options: [
-                { name: 'member', type: 6, description: 'Member to change', required: true },
-                { name: 'region', type: 3, description: 'New region', required: true, choices: Object.keys(REGION_ROLES).map(r => ({ name: REGION_ROLES[r].name, value: r })) }
-            ]
-        },
-        {
-            name: 'changeedition',
-            description: '[Staff] Change member edition',
-            options: [
-                { name: 'member', type: 6, description: 'Member to change', required: true },
-                { name: 'edition', type: 3, description: 'New edition', required: true, choices: [{ name: 'Java Edition', value: 'java' }, { name: 'Bedrock Edition', value: 'bedrock' }] }
-            ]
-        }
+        { name: 'sendverify', description: '[Staff] Send verification button message' },
+        { name: 'help', description: '[Staff] Show all commands' },
+        { name: 'forceverify', description: '[Staff] Force verify a member', options: [{ name: 'member', type: 6, description: 'Member to verify', required: true }] },
+        { name: 'unverify', description: '[Staff] Remove verification', options: [{ name: 'member', type: 6, description: 'Member to unverify', required: true }] },
+        { name: 'checkign', description: '[Staff] Check member IGN', options: [{ name: 'member', type: 6, description: 'Member to check', required: true }] },
+        { name: 'changedevice', description: '[Staff] Change member device', options: [{ name: 'member', type: 6, description: 'Member to change', required: true }, { name: 'device', type: 3, description: 'New device', required: true, choices: Object.keys(DEVICE_ROLES).map(d => ({ name: DEVICE_ROLES[d].name, value: d })) }] },
+        { name: 'changeregion', description: '[Staff] Change member region', options: [{ name: 'member', type: 6, description: 'Member to change', required: true }, { name: 'region', type: 3, description: 'New region', required: true, choices: Object.keys(REGION_ROLES).map(r => ({ name: REGION_ROLES[r].name, value: r })) }] },
+        { name: 'changeedition', description: '[Staff] Change member edition', options: [{ name: 'member', type: 6, description: 'Member to change', required: true }, { name: 'edition', type: 3, description: 'New edition', required: true, choices: [{ name: '☕ Java Edition', value: 'java' }, { name: '🟩 Bedrock Edition', value: 'bedrock' }] }] }
     ];
     
     const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -180,11 +134,11 @@ async function registerCommands() {
     console.log('✅ Commands registered');
 }
 
-// ==================== SEND VERIFY BUTTON MESSAGE ====================
+// ==================== SEND VERIFY BUTTON ====================
 async function sendVerifyMessage(channel) {
     const embed = {
         title: '🔐 MINECRAFT ACCOUNT VERIFICATION',
-        description: `━━━━━━━━━━━━━━━━━━━━\nClick the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (Java/Bedrock)\n• Your device\n• Your region\n━━━━━━━━━━━━━━━━━━━━\n**Note:** You must verify in this channel to access the server.`,
+        description: `━━━━━━━━━━━━━━━━━━━━\nClick the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (Java/Bedrock)\n• Your device\n• Your region\n━━━━━━━━━━━━━━━━━━━━`,
         color: 0x2ECC71,
         footer: { text: 'Verification is required to access the server' }
     };
@@ -194,12 +148,10 @@ async function sendVerifyMessage(channel) {
             .setCustomId('verify_button')
             .setLabel('✅ VERIFY NOW')
             .setStyle(ButtonStyle.Success)
-            .setEmoji('✅')
     );
     
-    const message = await channel.send({ embeds: [embed], components: [row] });
-    await message.pin().catch(() => {});
-    return message;
+    const msg = await channel.send({ embeds: [embed], components: [row] });
+    await msg.pin().catch(() => {});
 }
 
 // ==================== VERIFICATION MODAL ====================
@@ -244,7 +196,7 @@ async function showVerificationModal(interaction) {
 }
 
 // ==================== VERIFY MEMBER ====================
-async function verifyMember(member, ign, edition, device, region, staffOverride = false, staffMember = null) {
+async function verifyMember(member, ign, edition, device, region, staffOverride = false) {
     const guild = member.guild;
     const roles = await setupRoles(guild);
     
@@ -303,41 +255,17 @@ async function verifyMember(member, ign, edition, device, region, staffOverride 
     saveData();
     
     if (roles.logChannel) {
-        roles.logChannel.send(`✅ **${member.user.tag}** verified as **${ign}** (${edition} | ${device} | ${region}) ${staffOverride ? '(by staff)' : ''}`);
+        roles.logChannel.send(`✅ **${member.user.tag}** verified as **${ign}** (${edition} | ${device} | ${region})`);
     }
     
     try {
-        await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${ign}\n**Edition:** ${edition === 'java' ? '☕ Java' : '🟩 Bedrock'}\n**Device:** ${DEVICE_ROLES[device].name}\n**Region:** ${REGION_ROLES[region].name}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
+        await member.send(`✅ **Welcome!** Verified as **${ign}**\nEdition: ${edition === 'java' ? '☕ Java' : '🟩 Bedrock'}\nDevice: ${DEVICE_ROLES[device].name}\nRegion: ${REGION_ROLES[region].name}`);
     } catch(e) {}
     
     return { success: true, message: `✅ Verified as **${ign}**! You now have access to all channels.` };
 }
 
-// ==================== SEND REMINDERS ====================
-async function sendReminders(guild) {
-    const roles = await setupRoles(guild);
-    if (!roles.unverified) return;
-    
-    const members = await guild.members.fetch();
-    const now = Date.now();
-    
-    for (const member of members.values()) {
-        if (member.user.bot) continue;
-        if (member.roles.cache.has(roles.verified.id)) continue;
-        if (!member.roles.cache.has(roles.unverified.id)) continue;
-        
-        const last = lastReminder[member.id] || 0;
-        if (now - last >= REMINDER_INTERVAL_MS) {
-            try {
-                await member.send(`**Reminder:** Verify your Minecraft account by clicking the button in #${VERIFY_CHANNEL_NAME} to access ${guild.name}.`);
-                lastReminder[member.id] = now;
-                saveData();
-            } catch(e) {}
-        }
-    }
-}
-
-// ==================== EVENT HANDLERS ====================
+// ==================== READY EVENT ====================
 client.once('ready', async () => {
     console.log(`✅ IGN Verifier logged in as ${client.user.tag}`);
     const guild = client.guilds.cache.get(GUILD_ID);
@@ -346,69 +274,55 @@ client.once('ready', async () => {
         return;
     }
     
-    const roles = await setupRoles(guild);
+    await setupRoles(guild);
     await registerCommands();
     
+    const roles = await setupRoles(guild);
     const members = await guild.members.fetch();
-    let existingCount = 0;
+    let count = 0;
     
     for (const member of members.values()) {
         if (member.user.bot) continue;
-        if (!member.roles.cache.has(roles.verified.id)) {
-            if (!member.roles.cache.has(roles.unverified.id)) {
-                await member.roles.add(roles.unverified);
-                existingCount++;
-            }
-            if (!ignData[member.id]) {
-                try {
-                    await member.send(`**🔐 ${guild.name} - Verification Required**\n━━━━━━━━━━━━━━━━━━━━\nTo regain access to the server, please verify your Minecraft account by clicking the button in #${VERIFY_CHANNEL_NAME}.\n\nYou will need:\n• Your Minecraft username\n• Your game edition\n• Your device\n• Your region\n━━━━━━━━━━━━━━━━━━━━\nClick the "VERIFY NOW" button in #${VERIFY_CHANNEL_NAME} to start.`);
-                    lastReminder[member.id] = Date.now();
-                } catch(e) {
-                    console.log(`Could not DM ${member.user.tag}`);
-                }
-            }
+        if (!member.roles.cache.has(roles.verified.id) && !member.roles.cache.has(roles.unverified.id)) {
+            await member.roles.add(roles.unverified);
+            count++;
         }
     }
-    saveData();
-    console.log(`📊 Processed ${existingCount} existing members - gave them ☘️ Unverified role`);
     
-    setInterval(() => sendReminders(guild), 60 * 1000);
-    
-    console.log('✅ Ready');
-    console.log('📌 Use /sendverify in #verify channel to send the verification button');
+    console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
+    console.log('📌 Use /sendverify in #verify channel');
 });
 
+// ==================== NEW MEMBER ====================
 client.on('guildMemberAdd', async member => {
     if (member.user.bot) return;
     const roles = await setupRoles(member.guild);
     if (!member.roles.cache.has(roles.verified.id) && roles.unverified) {
         await member.roles.add(roles.unverified);
     }
-    lastReminder[member.id] = Date.now();
-    saveData();
 });
 
-// ==================== BUTTON & MODAL HANDLER ====================
+// ==================== INTERACTION HANDLER ====================
 client.on('interactionCreate', async interaction => {
-    // Handle button click
+    // BUTTON HANDLER
     if (interaction.isButton() && interaction.customId === 'verify_button') {
-        console.log('🔘 Button clicked by:', interaction.user.tag);
+        console.log(`🔘 Button clicked by ${interaction.user.tag}`);
         try {
             const roles = await setupRoles(interaction.guild);
             if (interaction.member.roles.cache.has(roles.verified.id)) {
                 return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
             }
             await showVerificationModal(interaction);
-            console.log('✅ Modal shown successfully');
         } catch (error) {
-            console.error('❌ Button error:', error);
-            await interaction.reply({ content: '❌ Something went wrong. Please try again.', ephemeral: true });
+            console.error('Button error:', error);
+            await interaction.reply({ content: '❌ Something went wrong. Try again.', ephemeral: true });
         }
+        return;
     }
     
-    // Handle modal submission
+    // MODAL HANDLER
     if (interaction.isModalSubmit() && interaction.customId === 'verificationModal') {
-        console.log('📝 Modal submitted by:', interaction.user.tag);
+        console.log(`📝 Modal submitted by ${interaction.user.tag}`);
         try {
             const username = interaction.fields.getTextInputValue('username');
             const edition = interaction.fields.getSelectMenuValue('edition');
@@ -416,49 +330,39 @@ client.on('interactionCreate', async interaction => {
             const region = interaction.fields.getSelectMenuValue('region');
             
             await interaction.deferReply({ ephemeral: true });
-            const result = await verifyMember(interaction.member, username, edition, device, region, false);
+            const result = await verifyMember(interaction.member, username, edition, device, region);
             await interaction.editReply({ content: result.message });
-            console.log('✅ Verification successful for:', username);
         } catch (error) {
-            console.error('❌ Modal error:', error);
-            await interaction.reply({ content: '❌ Verification failed. Please try again.', ephemeral: true });
+            console.error('Modal error:', error);
+            await interaction.reply({ content: '❌ Verification failed. Try again.', ephemeral: true });
         }
         return;
     }
     
-    // Handle slash commands
-    if (!interaction.isChatInputCommand()) return;
+    // COMMAND HANDLER
+    if (!interaction.isCommand()) return;
     
-    const { commandName, options, member, guild } = interaction;
+    const { commandName, options, member, channel } = interaction;
     const isStaff = member.permissions.has('Administrator') || member.roles.cache.some(r => ['Staff', 'Mod', 'Admin'].includes(r.name));
     
-    // /sendverify command
     if (commandName === 'sendverify' && isStaff) {
-        const channel = interaction.channel;
         if (channel.name !== VERIFY_CHANNEL_NAME) {
-            return interaction.reply({ content: `❌ Use this command in #${VERIFY_CHANNEL_NAME} channel.`, ephemeral: true });
+            return interaction.reply({ content: `❌ Use this in #${VERIFY_CHANNEL_NAME}`, ephemeral: true });
         }
         await interaction.deferReply({ ephemeral: true });
-        try {
-            await sendVerifyMessage(channel);
-            await interaction.editReply({ content: '✅ Verification button message sent and pinned!' });
-        } catch (error) {
-            console.error('Error sending verify message:', error);
-            await interaction.editReply({ content: '❌ Failed to send verification message. Check bot permissions.' });
-        }
+        await sendVerifyMessage(channel);
+        await interaction.editReply({ content: '✅ Verification button sent!' });
     }
     else if (commandName === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/sendverify** - Send verification button message in current channel\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member's IGN\n**/changedevice @user device** - Change member's device\n**/changeregion @user region** - Change member's region\n**/changeedition @user edition** - Change member's edition\n━━━━━━━━━━━━━━━━━━━━\n**Available Devices:** ${Object.values(DEVICE_ROLES).map(d => d.name).join(', ')}\n**Available Regions:** ${Object.values(REGION_ROLES).map(r => r.name).join(', ')}\n**Editions:** ☕ Java Edition, 🟩 Bedrock Edition`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n/sendverify - Send verification button\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition\n━━━━━━━━━━━━━━━━━━━━\nDevices: Mobile, PC, Controller, PlayStation, Switch\nRegions: Asia, Europe, America, Africa, Oceania\nEditions: Java, Bedrock`;
         await interaction.reply({ content: helpText, ephemeral: true });
     }
     else if (commandName === 'forceverify' && isStaff) {
-        const target = options.getMember('member');
-        interaction.client.forceTarget = target.id;
         await showVerificationModal(interaction);
     }
     else if (commandName === 'unverify' && isStaff) {
         const target = options.getMember('member');
-        const roles = await setupRoles(guild);
+        const roles = await setupRoles(interaction.guild);
         
         if (!target.roles.cache.has(roles.verified.id)) {
             return interaction.reply({ content: '❌ Member not verified.', ephemeral: true });
@@ -469,10 +373,7 @@ client.on('interactionCreate', async interaction => {
         if (roles.unverified) await target.roles.add(roles.unverified);
         
         for (const role of Object.values(roles)) {
-            if (role && target.roles.cache.has(role.id) && 
-                role.name !== roles.unverified.name && 
-                role.name !== roles.player.name && 
-                role.name !== roles.verified.name) {
+            if (role && target.roles.cache.has(role.id) && role.name !== roles.unverified.name && role.name !== roles.player.name && role.name !== roles.verified.name) {
                 await target.roles.remove(role);
             }
         }
@@ -484,17 +385,17 @@ client.on('interactionCreate', async interaction => {
         delete ignData[target.id];
         saveData();
         
-        await interaction.reply({ content: `✅ Unverified ${target.user.tag}. They must re-verify in #${VERIFY_CHANNEL_NAME}.`, ephemeral: true });
+        await interaction.reply({ content: `✅ Unverified ${target.user.tag}`, ephemeral: true });
         
         if (roles.logChannel) {
-            roles.logChannel.send(`🛠️ **${interaction.user.tag}** unverified **${target.user.tag}**`);
+            roles.logChannel.send(`🛠️ ${interaction.user.tag} unverified ${target.user.tag}`);
         }
     }
     else if (commandName === 'checkign' && isStaff) {
         const target = options.getMember('member');
         const data = ignData[target.id];
         if (data) {
-            await interaction.reply({ content: `**${target.user.tag}**\n━━━━━━━━━━━━━━━━━━━━\n**IGN:** ${data.ign}\n**Edition:** ${data.edition === 'java' ? '☕ Java' : '🟩 Bedrock'}\n**Device:** ${DEVICE_ROLES[data.device]?.name || data.device}\n**Region:** ${REGION_ROLES[data.region]?.name || data.region}\n**Verified:** ${new Date(data.verifiedAt).toLocaleString()}`, ephemeral: true });
+            await interaction.reply({ content: `**${target.user.tag}**\nIGN: ${data.ign}\nEdition: ${data.edition === 'java' ? '☕ Java' : '🟩 Bedrock'}\nDevice: ${DEVICE_ROLES[data.device]?.name}\nRegion: ${REGION_ROLES[data.region]?.name}\nVerified: ${new Date(data.verifiedAt).toLocaleString()}`, ephemeral: true });
         } else {
             await interaction.reply({ content: `${target.user.tag} is not verified.`, ephemeral: true });
         }
@@ -502,7 +403,7 @@ client.on('interactionCreate', async interaction => {
     else if (commandName === 'changedevice' && isStaff) {
         const target = options.getMember('member');
         const newDevice = options.getString('device');
-        const roles = await setupRoles(guild);
+        const roles = await setupRoles(interaction.guild);
         const data = ignData[target.id];
         
         if (!data) return interaction.reply({ content: '❌ Member not verified.', ephemeral: true });
@@ -520,15 +421,11 @@ client.on('interactionCreate', async interaction => {
         saveData();
         
         await interaction.reply({ content: `✅ Changed ${target.user.tag}'s device to ${DEVICE_ROLES[newDevice].name}`, ephemeral: true });
-        
-        if (roles.logChannel) {
-            roles.logChannel.send(`🛠️ **${interaction.user.tag}** changed ${target.user.tag}'s device to ${DEVICE_ROLES[newDevice].name}`);
-        }
     }
     else if (commandName === 'changeregion' && isStaff) {
         const target = options.getMember('member');
         const newRegion = options.getString('region');
-        const roles = await setupRoles(guild);
+        const roles = await setupRoles(interaction.guild);
         const data = ignData[target.id];
         
         if (!data) return interaction.reply({ content: '❌ Member not verified.', ephemeral: true });
@@ -546,15 +443,11 @@ client.on('interactionCreate', async interaction => {
         saveData();
         
         await interaction.reply({ content: `✅ Changed ${target.user.tag}'s region to ${REGION_ROLES[newRegion].name}`, ephemeral: true });
-        
-        if (roles.logChannel) {
-            roles.logChannel.send(`🛠️ **${interaction.user.tag}** changed ${target.user.tag}'s region to ${REGION_ROLES[newRegion].name}`);
-        }
     }
     else if (commandName === 'changeedition' && isStaff) {
         const target = options.getMember('member');
         const newEdition = options.getString('edition');
-        const roles = await setupRoles(guild);
+        const roles = await setupRoles(interaction.guild);
         const data = ignData[target.id];
         
         if (!data) return interaction.reply({ content: '❌ Member not verified.', ephemeral: true });
@@ -572,10 +465,6 @@ client.on('interactionCreate', async interaction => {
         saveData();
         
         await interaction.reply({ content: `✅ Changed ${target.user.tag}'s edition to ${EDITION_ROLES[newEdition].name}`, ephemeral: true });
-        
-        if (roles.logChannel) {
-            roles.logChannel.send(`🛠️ **${interaction.user.tag}** changed ${target.user.tag}'s edition to ${EDITION_ROLES[newEdition].name}`);
-        }
     }
     else if (!isStaff && ['sendverify', 'forceverify', 'unverify', 'checkign', 'changedevice', 'changeregion', 'changeedition', 'help'].includes(commandName)) {
         await interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
