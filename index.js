@@ -17,7 +17,7 @@ const GUILD_ID = process.env.IGN_GUILD_ID;
 
 // ==================== CONFIGURATION ====================
 const VERIFIED_ROLE_NAME = '✅ Verified';
-const PLAYER_ROLE_NAME = 'Player ⚔️';
+const PLAYER_ROLE_NAME = '⚔️ Player';
 const UNVERIFIED_ROLE_NAME = '☘️ Unverified';
 const VERIFY_CHANNEL_NAME = 'verify';
 const LOG_CHANNEL_NAME = 'logs';
@@ -388,40 +388,56 @@ client.on('guildMemberAdd', async member => {
     saveData();
 });
 
-// ==================== BUTTON HANDLER ====================
+// ==================== BUTTON & MODAL HANDLER ====================
 client.on('interactionCreate', async interaction => {
+    // Handle button click
     if (interaction.isButton() && interaction.customId === 'verify_button') {
-        const roles = await setupRoles(interaction.guild);
-        if (interaction.member.roles.cache.has(roles.verified.id)) {
-            return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
+        console.log('🔘 Button clicked by:', interaction.user.tag);
+        try {
+            const roles = await setupRoles(interaction.guild);
+            if (interaction.member.roles.cache.has(roles.verified.id)) {
+                return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
+            }
+            await showVerificationModal(interaction);
+            console.log('✅ Modal shown successfully');
+        } catch (error) {
+            console.error('❌ Button error:', error);
+            await interaction.reply({ content: '❌ Something went wrong. Please try again.', ephemeral: true });
         }
-        await showVerificationModal(interaction);
     }
     
+    // Handle modal submission
     if (interaction.isModalSubmit() && interaction.customId === 'verificationModal') {
-        const username = interaction.fields.getTextInputValue('username');
-        const edition = interaction.fields.getSelectMenuValue('edition');
-        const device = interaction.fields.getSelectMenuValue('device');
-        const region = interaction.fields.getSelectMenuValue('region');
-        
-        await interaction.deferReply({ ephemeral: true });
-        const result = await verifyMember(interaction.member, username, edition, device, region, false);
-        await interaction.editReply({ content: result.message });
+        console.log('📝 Modal submitted by:', interaction.user.tag);
+        try {
+            const username = interaction.fields.getTextInputValue('username');
+            const edition = interaction.fields.getSelectMenuValue('edition');
+            const device = interaction.fields.getSelectMenuValue('device');
+            const region = interaction.fields.getSelectMenuValue('region');
+            
+            await interaction.deferReply({ ephemeral: true });
+            const result = await verifyMember(interaction.member, username, edition, device, region, false);
+            await interaction.editReply({ content: result.message });
+            console.log('✅ Verification successful for:', username);
+        } catch (error) {
+            console.error('❌ Modal error:', error);
+            await interaction.reply({ content: '❌ Verification failed. Please try again.', ephemeral: true });
+        }
         return;
     }
     
+    // Handle slash commands
     if (!interaction.isChatInputCommand()) return;
     
     const { commandName, options, member, guild } = interaction;
     const isStaff = member.permissions.has('Administrator') || member.roles.cache.some(r => ['Staff', 'Mod', 'Admin'].includes(r.name));
     
-    // /sendverify command (fixed - no timeout)
+    // /sendverify command
     if (commandName === 'sendverify' && isStaff) {
         const channel = interaction.channel;
         if (channel.name !== VERIFY_CHANNEL_NAME) {
             return interaction.reply({ content: `❌ Use this command in #${VERIFY_CHANNEL_NAME} channel.`, ephemeral: true });
         }
-        // Acknowledge immediately to avoid timeout
         await interaction.deferReply({ ephemeral: true });
         try {
             await sendVerifyMessage(channel);
