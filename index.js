@@ -85,7 +85,7 @@ async function showVerificationModal(interaction, targetId = null) {
         .setLabel('Minecraft Username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your Minecraft username');
+        .setPlaceholder('Enter your Minecraft           username');
     
     const editionInput = new TextInputBuilder()
         .setCustomId('edition')
@@ -130,41 +130,42 @@ async function verifyMember(member, username, edition, device, region, isForce =
     const regionRole = await getRole(guild, REGIONS[region]);
     
     if (!verifiedRole || !playerRole) {
-        return { success: false, message: '❌ Required roles not found. Please contact staff.' };
+        return { success: false, message: '❌ Required roles not found.' };
     }
     
     if (member.roles.cache.has(verifiedRole.id)) {
         return { success: false, message: '❌ Already verified!' };
     }
     
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
-        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, or underscores.' };
+    // ALLOW SPACES for Bedrock usernames
+    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
+        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
     }
     
     edition = edition.toLowerCase();
     if (edition !== 'java' && edition !== 'bedrock') {
-        return { success: false, message: '❌ Invalid edition. Use "java" or "bedrock".' };
+        return { success: false, message: '❌ Invalid edition.' };
     }
     
     device = device.toLowerCase();
     if (!DEVICES[device]) {
-        return { success: false, message: '❌ Invalid device. Options: mobile, pc, controller, playstation, switch' };
+        return { success: false, message: '❌ Invalid device.' };
     }
     
     region = region.toLowerCase();
     if (!REGIONS[region]) {
-        return { success: false, message: '❌ Invalid region. Options: asia, europe, america, africa, oceania' };
+        return { success: false, message: '❌ Invalid region.' };
     }
     
     if (db.ignToUser[username.toLowerCase()] && db.ignToUser[username.toLowerCase()] !== member.id) {
-        return { success: false, message: '❌ This username is already verified by another member.' };
+        return { success: false, message: '❌ Username already verified.' };
     }
     
     let finalUsername = username;
     if (!isForce && edition === 'java') {
         const mojangName = await checkJavaUsername(username);
         if (!mojangName) {
-            return { success: false, message: '❌ Java username does not exist on Mojang.' };
+            return { success: false, message: '❌ Java username does not exist.' };
         }
         finalUsername = mojangName;
     }
@@ -183,26 +184,25 @@ async function verifyMember(member, username, edition, device, region, isForce =
     
     db.users[member.id] = { username: finalUsername, edition, device, region, verifiedAt: Date.now() };
     db.ignToUser[finalUsername.toLowerCase()] = member.id;
-    delete db.lastReminder[member.id];
     saveData();
     
     const logChannel = guild.channels.cache.find(c => c.name === LOG_CHANNEL);
     if (logChannel) {
-        logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
+        logChannel.send(`✅ ${member.user.tag} verified as ${finalUsername}`);
     }
     
     try {
-        await member.send(`✅ **Welcome!**\n━━━━━━━━━━━━━━━━━━━━\n**Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}`);
+        await member.send(`✅ Verified as ${finalUsername}!`);
     } catch(e) {}
     
-    return { success: true, message: `✅ Verified as **${finalUsername}**!` };
+    return { success: true, message: `✅ Verified as ${finalUsername}!` };
 }
 
 // ==================== SEND BUTTON ====================
 async function sendVerifyButton(channel) {
     const embed = new EmbedBuilder()
         .setTitle('🔐 MINECRAFT VERIFICATION')
-        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (java/bedrock)\n• Your device\n• Your region')
+        .setDescription('Click the button below to verify.')
         .setColor(0x2ECC71);
     
     const row = new ActionRowBuilder().addComponents(
@@ -212,32 +212,32 @@ async function sendVerifyButton(channel) {
             .setStyle(ButtonStyle.Success)
     );
     
-    const msg = await channel.send({ embeds: [embed], components: [row] });
-    await msg.pin().catch(() => {});
+    await channel.send({ embeds: [embed], components: [row] });
 }
 
-// ==================== SEND REMINDERS ====================
-async function sendReminders(guild) {
+// ==================== NOTIFY UNVERIFIED MEMBERS ====================
+async function notifyUnverified(guild, interaction = null) {
     const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
-    if (!unverifiedRole) return;
+    if (!unverifiedRole) return 0;
     
     const members = await guild.members.fetch();
-    const now = Date.now();
-    const HOUR = 60 * 60 * 1000;
+    let count = 0;
     
     for (const member of members.values()) {
         if (member.user.bot) continue;
         if (member.roles.cache.has(unverifiedRole.id)) {
-            const last = db.lastReminder[member.id] || 0;
-            if (now - last >= HOUR) {
-                try {
-                    await member.send(`**Reminder:** Verify your Minecraft account by clicking the button in #${VERIFY_CHANNEL}.`);
-                    db.lastReminder[member.id] = now;
-                    saveData();
-                } catch(e) {}
-            }
+            try {
+                await member.send(`**🔐 Verification Required**\nClick the button in #${VERIFY_CHANNEL} to verify your Minecraft account.`);
+                count++;
+                await new Promise(r => setTimeout(r, 500));
+            } catch(e) {}
         }
     }
+    
+    if (interaction) {
+        await interaction.reply({ content: `✅ Sent reminders to ${count} members.`, flags: 64 });
+    }
+    return count;
 }
 
 // ==================== COMMANDS ====================
@@ -256,13 +256,21 @@ async function registerCommands() {
     ];
     
     const rest = new REST({ version: '10' }).setToken(TOKEN);
+    
+    try {
+        const existing = await rest.get(Routes.applicationCommands(CLIENT_ID));
+        for (const cmd of existing) {
+            await rest.delete(Routes.applicationCommand(CLIENT_ID, cmd.id));
+        }
+    } catch(e) {}
+    
     await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
     console.log('✅ Commands registered');
 }
 
 // ==================== READY ====================
 client.once('ready', async () => {
-    console.log(`✅ IGN Verifier logged in as ${client.user.tag}`);
+    console.log(`✅ Logged in as ${client.user.tag}`);
     const guild = client.guilds.cache.get(GUILD_ID);
     if (!guild) return console.error('❌ Guild not found!');
     
@@ -282,10 +290,8 @@ client.once('ready', async () => {
         }
     }
     
-    console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
-    console.log('📌 Staff commands: /sendverify, /notify, /help, /stats, /forceverify, /unverify, /checkign, /changedevice, /changeregion, /changeedition');
-    
-    setInterval(() => sendReminders(guild), 60 * 1000);
+    console.log(`✅ Ready | Gave unverified to ${count} members`);
+    console.log('📌 Use /sendverify in #verify');
 });
 
 client.on('guildMemberAdd', async member => {
@@ -294,25 +300,16 @@ client.on('guildMemberAdd', async member => {
     if (unverifiedRole) await member.roles.add(unverifiedRole);
 });
 
-// ==================== INTERACTION HANDLER ====================
+// ==================== INTERACTIONS ====================
 client.on('interactionCreate', async interaction => {
-    // BUTTON HANDLER
+    // BUTTON
     if (interaction.isButton() && interaction.customId === 'verify_btn') {
-        console.log(`🔘 ${interaction.user.tag} clicked verify button`);
-        
-        const verifiedRole = await getRole(interaction.guild, VERIFIED_ROLE);
-        if (verifiedRole && interaction.member.roles.cache.has(verifiedRole.id)) {
-            return interaction.reply({ content: '❌ You are already verified!', flags: 64 });
-        }
-        
         await showVerificationModal(interaction);
         return;
     }
     
-    // MODAL HANDLER
+    // MODAL
     if (interaction.isModalSubmit() && interaction.customId.startsWith('verify_modal')) {
-        console.log(`📝 ${interaction.user.tag} submitted verification`);
-        
         let targetMember = interaction.member;
         if (interaction.customId.includes(':')) {
             const targetId = interaction.customId.split(':')[1];
@@ -332,48 +329,30 @@ client.on('interactionCreate', async interaction => {
         return;
     }
     
-    // SLASH COMMANDS
+    // COMMANDS
     if (!interaction.isChatInputCommand()) return;
     
     const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
     
     if (!isStaff) {
-        return interaction.reply({ content: '❌ Staff only command.', flags: 64 });
+        return interaction.reply({ content: '❌ Staff only.', flags: 64 });
     }
     
-    // /sendverify
     if (commandName === 'sendverify') {
         if (channel.name !== VERIFY_CHANNEL) {
-            return interaction.reply({ content: `❌ Use in #${VERIFY_CHANNEL}`, flags: 64 });
+            return interaction.reply({ content: `Use in #${VERIFY_CHANNEL}`, flags: 64 });
         }
         await sendVerifyButton(channel);
-        await interaction.reply({ content: '✅ Verification button sent!', flags: 64 });
+        await interaction.reply({ content: '✅ Button sent!', flags: 64 });
     }
-    
-    // /notify
     else if (commandName === 'notify') {
-        await interaction.reply({ content: '📨 Sending reminders...', flags: 64 });
-        const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
-        const members = await guild.members.fetch();
-        let count = 0;
-        for (const m of members.values()) {
-            if (m.user.bot) continue;
-            if (unverifiedRole && m.roles.cache.has(unverifiedRole.id)) {
-                try { await m.send(`**🔐 Verification Required**\nClick the button in #${VERIFY_CHANNEL} to verify.`); count++; } catch(e) {}
-                await new Promise(r => setTimeout(r, 500));
-            }
-        }
-        await interaction.editReply({ content: `✅ Sent reminders to ${count} members.` });
+        await notifyUnverified(guild, interaction);
     }
-    
-    // /help
     else if (commandName === 'help') {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/sendverify** - Send verification button\n**/notify** - DM reminder to unverified\n**/stats** - Show verification stats\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member IGN\n**/changedevice @user device** - Change device\n**/changeregion @user region** - Change region\n**/changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n/sendverify - Send button\n/notify - Remind unverified\n/stats - Show stats\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition`;
         await interaction.reply({ content: helpText, flags: 64 });
     }
-    
-    // /stats
     else if (commandName === 'stats') {
         const verifiedRole = await getRole(guild, VERIFIED_ROLE);
         const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
@@ -386,29 +365,22 @@ client.on('interactionCreate', async interaction => {
             else if (unverifiedRole && m.roles.cache.has(unverifiedRole.id)) unverified++;
         }
         
-        const statsText = `**📊 VERIFICATION STATS**\n━━━━━━━━━━━━━━━━━━━━\n✅ **Verified:** ${verified} members\n☘️ **Unverified:** ${unverified} members\n📝 **Total Tests:** ${Object.keys(db.users).length}\n━━━━━━━━━━━━━━━━━━━━`;
-        await interaction.reply({ content: statsText, flags: 64 });
+        await interaction.reply({ content: `📊 Stats\nVerified: ${verified}\nUnverified: ${unverified}\nTotal: ${Object.keys(db.users).length}`, flags: 64 });
     }
-    
-    // /forceverify
     else if (commandName === 'forceverify') {
         const target = options.getMember('member');
         await showVerificationModal(interaction, target.id);
     }
-    
-    // /unverify
     else if (commandName === 'unverify') {
         const target = options.getMember('member');
         const verifiedRole = await getRole(guild, VERIFIED_ROLE);
-        const playerRole = await getRole(guild, PLAYER_ROLE);
         const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
         
-        if (!verifiedRole || !target.roles.cache.has(verifiedRole.id)) {
-            return interaction.reply({ content: '❌ Member not verified.', flags: 64 });
+        if (!target.roles.cache.has(verifiedRole.id)) {
+            return interaction.reply({ content: 'Not verified.', flags: 64 });
         }
         
         await target.roles.remove(verifiedRole);
-        if (playerRole) await target.roles.remove(playerRole);
         if (unverifiedRole) await target.roles.add(unverifiedRole);
         
         for (const [key, name] of Object.entries(EDITIONS)) {
@@ -424,85 +396,70 @@ client.on('interactionCreate', async interaction => {
             if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
         }
         
-        try { await target.setNickname(null); } catch(e) {}
-        
-        const oldIgn = db.users[target.id]?.username;
-        if (oldIgn) delete db.ignToUser[oldIgn.toLowerCase()];
         delete db.users[target.id];
         saveData();
         
-        const logChannel = guild.channels.cache.find(c => c.name === LOG_CHANNEL);
-        if (logChannel) logChannel.send(`🛠️ **${interaction.user.tag}** unverified **${target.user.tag}**`);
-        
         await interaction.reply({ content: `✅ Unverified ${target.user.tag}`, flags: 64 });
     }
-    
-    // /checkign
     else if (commandName === 'checkign') {
         const target = options.getMember('member');
         const data = db.users[target.id];
         if (data) {
-            await interaction.reply({ content: `**${target.user.tag}**\n━━━━━━━━━━━━━━━━━━━━\n**IGN:** ${data.username}\n**Edition:** ${EDITIONS[data.edition]}\n**Device:** ${DEVICES[data.device]}\n**Region:** ${REGIONS[data.region]}\n**Verified:** ${new Date(data.verifiedAt).toLocaleString()}`, flags: 64 });
+            await interaction.reply({ content: `${target.user.tag}\nIGN: ${data.username}\nEdition: ${data.edition}\nDevice: ${data.device}\nRegion: ${data.region}`, flags: 64 });
         } else {
-            await interaction.reply({ content: `${target.user.tag} is not verified.`, flags: 64 });
+            await interaction.reply({ content: `${target.user.tag} not verified.`, flags: 64 });
         }
     }
-    
-    // /changedevice
     else if (commandName === 'changedevice') {
         const target = options.getMember('member');
         const newDevice = options.getString('device');
         const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Member not verified.', flags: 64 });
+        if (!data) return interaction.reply({ content: 'Not verified.', flags: 64 });
         
-        const oldDeviceRole = await getRole(guild, DEVICES[data.device]);
-        const newDeviceRole = await getRole(guild, DEVICES[newDevice]);
+        const oldRole = await getRole(guild, DEVICES[data.device]);
+        const newRole = await getRole(guild, DEVICES[newDevice]);
         
-        if (oldDeviceRole && target.roles.cache.has(oldDeviceRole.id)) await target.roles.remove(oldDeviceRole);
-        if (newDeviceRole) await target.roles.add(newDeviceRole);
+        if (oldRole && target.roles.cache.has(oldRole.id)) await target.roles.remove(oldRole);
+        if (newRole) await target.roles.add(newRole);
         
         data.device = newDevice;
         saveData();
         
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s device to ${DEVICES[newDevice]}`, flags: 64 });
+        await interaction.reply({ content: `✅ Changed device to ${DEVICES[newDevice]}`, flags: 64 });
     }
-    
-    // /changeregion
     else if (commandName === 'changeregion') {
         const target = options.getMember('member');
         const newRegion = options.getString('region');
         const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Member not verified.', flags: 64 });
+        if (!data) return interaction.reply({ content: 'Not verified.', flags: 64 });
         
-        const oldRegionRole = await getRole(guild, REGIONS[data.region]);
-        const newRegionRole = await getRole(guild, REGIONS[newRegion]);
+        const oldRole = await getRole(guild, REGIONS[data.region]);
+        const newRole = await getRole(guild, REGIONS[newRegion]);
         
-        if (oldRegionRole && target.roles.cache.has(oldRegionRole.id)) await target.roles.remove(oldRegionRole);
-        if (newRegionRole) await target.roles.add(newRegionRole);
+        if (oldRole && target.roles.cache.has(oldRole.id)) await target.roles.remove(oldRole);
+        if (newRole) await target.roles.add(newRole);
         
         data.region = newRegion;
         saveData();
         
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s region to ${REGIONS[newRegion]}`, flags: 64 });
+        await interaction.reply({ content: `✅ Changed region to ${REGIONS[newRegion]}`, flags: 64 });
     }
-    
-    // /changeedition
     else if (commandName === 'changeedition') {
         const target = options.getMember('member');
         const newEdition = options.getString('edition');
         const data = db.users[target.id];
-        if (!data) return interaction.reply({ content: '❌ Member not verified.', flags: 64 });
+        if (!data) return interaction.reply({ content: 'Not verified.', flags: 64 });
         
-        const oldEditionRole = await getRole(guild, EDITIONS[data.edition]);
-        const newEditionRole = await getRole(guild, EDITIONS[newEdition]);
+        const oldRole = await getRole(guild, EDITIONS[data.edition]);
+        const newRole = await getRole(guild, EDITIONS[newEdition]);
         
-        if (oldEditionRole && target.roles.cache.has(oldEditionRole.id)) await target.roles.remove(oldEditionRole);
-        if (newEditionRole) await target.roles.add(newEditionRole);
+        if (oldRole && target.roles.cache.has(oldRole.id)) await target.roles.remove(oldRole);
+        if (newRole) await target.roles.add(newRole);
         
         data.edition = newEdition;
         saveData();
         
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`, flags: 64 });
+        await interaction.reply({ content: `✅ Changed edition to ${EDITIONS[newEdition]}`, flags: 64 });
     }
 });
 
