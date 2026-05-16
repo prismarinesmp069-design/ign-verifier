@@ -1,5 +1,15 @@
 const { Client, GatewayIntentBits, REST, Routes, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
+const express = require('express');
+
+// ==================== KEEP-ALIVE SERVER ====================
+const keepAliveApp = express();
+keepAliveApp.get('/', (req, res) => {
+    res.send('✅ IGN Verifier Bot is running!');
+});
+keepAliveApp.listen(3000, () => {
+    console.log('🌐 Keep-alive server running on port 3000');
+});
 
 const client = new Client({
     intents: [
@@ -21,7 +31,7 @@ const PLAYER_ROLE_NAME = '⚔️ Player';
 const UNVERIFIED_ROLE_NAME = '☘️ Unverified';
 const VERIFY_CHANNEL_NAME = 'verify';
 const LOG_CHANNEL_NAME = 'logs';
-const REMINDER_INTERVAL_MS = 30 * 60 * 1000;
+const REMINDER_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 
 const EDITION_ROLES = {
     'java': { name: '☕ Java Edition', emoji: '☕', color: 0xE67E22 },
@@ -120,6 +130,7 @@ async function setupRoles(guild) {
 async function registerCommands() {
     const commands = [
         { name: 'sendverify', description: '[Staff] Send verification button message' },
+        { name: 'notify', description: '[Staff] Send verification reminder to all unverified members' },
         { name: 'help', description: '[Staff] Show all commands' },
         { name: 'forceverify', description: '[Staff] Force verify a member', options: [{ name: 'member', type: 6, description: 'Member to verify', required: true }] },
         { name: 'unverify', description: '[Staff] Remove verification', options: [{ name: 'member', type: 6, description: 'Member to unverify', required: true }] },
@@ -265,6 +276,30 @@ async function verifyMember(member, ign, edition, device, region, staffOverride 
     return { success: true, message: `✅ Verified as **${ign}**! You now have access to all channels.` };
 }
 
+// ==================== SEND REMINDERS ====================
+async function sendReminders(guild) {
+    const roles = await setupRoles(guild);
+    if (!roles.unverified) return;
+    
+    const members = await guild.members.fetch();
+    const now = Date.now();
+    
+    for (const member of members.values()) {
+        if (member.user.bot) continue;
+        if (member.roles.cache.has(roles.verified.id)) continue;
+        if (!member.roles.cache.has(roles.unverified.id)) continue;
+        
+        const last = lastReminder[member.id] || 0;
+        if (now - last >= REMINDER_INTERVAL_MS) {
+            try {
+                await member.send(`**Reminder:** Verify your Minecraft account by clicking the button in #${VERIFY_CHANNEL_NAME} to access ${guild.name}.`);
+                lastReminder[member.id] = now;
+                saveData();
+            } catch(e) {}
+        }
+    }
+}
+
 // ==================== READY EVENT ====================
 client.once('ready', async () => {
     console.log(`✅ IGN Verifier logged in as ${client.user.tag}`);
@@ -280,6 +315,7 @@ client.once('ready', async () => {
     const roles = await setupRoles(guild);
     const members = await guild.members.fetch();
     let count = 0;
+    let notifiedCount = 0;
     
     for (const member of members.values()) {
         if (member.user.bot) continue;
@@ -287,10 +323,26 @@ client.once('ready', async () => {
             await member.roles.add(roles.unverified);
             count++;
         }
+        if (!member.roles.cache.has(roles.verified.id) && member.roles.cache.has(roles.unverified.id) && !ignData[member.id]) {
+            try {
+                await member.send(`**🔐 ${guild.name} - Verification Required**\n━━━━━━━━━━━━━━━━━━━━\nTo access the server, please verify your Minecraft account.\n\nClick the **VERIFY NOW** button in the #${VERIFY_CHANNEL_NAME} channel to start.\n━━━━━━━━━━━━━━━━━━━━\nYou will need:\n• Your Minecraft username\n• Your game edition (Java/Bedrock)\n• Your device\n• Your region`);
+                notifiedCount++;
+                await new Promise(r => setTimeout(r, 1000));
+                lastReminder[member.id] = Date.now();
+            } catch(e) {
+                console.log(`Could not DM ${member.user.tag}`);
+            }
+        }
     }
+    saveData();
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
+    console.log(`📨 Sent verification DM to ${notifiedCount} existing members`);
     console.log('📌 Use /sendverify in #verify channel');
+    console.log('📌 Use /notify to send reminders to all unverified members');
+    
+    // Start reminder loop
+    setInterval(() => sendReminders(guild), 60 * 1000);
 });
 
 // ==================== NEW MEMBER ====================
@@ -300,6 +352,11 @@ client.on('guildMemberAdd', async member => {
     if (!member.roles.cache.has(roles.verified.id) && roles.unverified) {
         await member.roles.add(roles.unverified);
     }
+    try {
+        await member.send(`**🔐 ${member.guild.name} - Verification Required**\n━━━━━━━━━━━━━━━━━━━━\nTo access the server, please verify your Minecraft account.\n\nClick the **VERIFY NOW** button in the #${VERIFY_CHANNEL_NAME} channel to start.`);
+    } catch(e) {}
+    lastReminder[member.id] = Date.now();
+    saveData();
 });
 
 // ==================== INTERACTION HANDLER ====================
@@ -342,7 +399,7 @@ client.on('interactionCreate', async interaction => {
     // COMMAND HANDLER
     if (!interaction.isCommand()) return;
     
-    const { commandName, options, member, channel } = interaction;
+    const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has('Administrator') || member.roles.cache.some(r => ['Staff', 'Mod', 'Admin'].includes(r.name));
     
     if (commandName === 'sendverify' && isStaff) {
@@ -353,8 +410,33 @@ client.on('interactionCreate', async interaction => {
         await sendVerifyMessage(channel);
         await interaction.editReply({ content: '✅ Verification button sent!' });
     }
+    else if (commandName === 'notify' && isStaff) {
+        await interaction.deferReply({ ephemeral: true });
+        const roles = await setupRoles(guild);
+        const members = await guild.members.fetch();
+        let count = 0;
+        
+        for (const member of members.values()) {
+            if (member.user.bot) continue;
+            if (!member.roles.cache.has(roles.verified.id) && member.roles.cache.has(roles.unverified.id)) {
+                try {
+                    await member.send(`**🔐 ${guild.name} - Verification Required**\n━━━━━━━━━━━━━━━━━━━━\nTo access the server, please verify your Minecraft account.\n\nClick the **VERIFY NOW** button in <#${channel.id}> to start.\n━━━━━━━━━━━━━━━━━━━━\nYou will need:\n• Your Minecraft username\n• Your game edition (Java/Bedrock)\n• Your device\n• Your region`);
+                    count++;
+                    await new Promise(r => setTimeout(r, 1000));
+                } catch(e) {
+                    console.log(`Could not DM ${member.user.tag}`);
+                }
+            }
+        }
+        
+        await interaction.editReply({ content: `✅ Sent verification reminders to **${count}** unverified members!` });
+        
+        if (roles.logChannel) {
+            roles.logChannel.send(`📢 **${interaction.user.tag}** sent verification reminders to ${count} members`);
+        }
+    }
     else if (commandName === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n/sendverify - Send verification button\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition\n━━━━━━━━━━━━━━━━━━━━\nDevices: Mobile, PC, Controller, PlayStation, Switch\nRegions: Asia, Europe, America, Africa, Oceania\nEditions: Java, Bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n/sendverify - Send verification button\n/notify - Send reminder to all unverified members\n/forceverify @user - Force verify\n/unverify @user - Remove verification\n/checkign @user - Check IGN\n/changedevice @user device - Change device\n/changeregion @user region - Change region\n/changeedition @user edition - Change edition\n━━━━━━━━━━━━━━━━━━━━\nDevices: Mobile, PC, Controller, PlayStation, Switch\nRegions: Asia, Europe, America, Africa, Oceania\nEditions: Java, Bedrock`;
         await interaction.reply({ content: helpText, ephemeral: true });
     }
     else if (commandName === 'forceverify' && isStaff) {
@@ -466,9 +548,18 @@ client.on('interactionCreate', async interaction => {
         
         await interaction.reply({ content: `✅ Changed ${target.user.tag}'s edition to ${EDITION_ROLES[newEdition].name}`, ephemeral: true });
     }
-    else if (!isStaff && ['sendverify', 'forceverify', 'unverify', 'checkign', 'changedevice', 'changeregion', 'changeedition', 'help'].includes(commandName)) {
+    else if (!isStaff && ['sendverify', 'notify', 'forceverify', 'unverify', 'checkign', 'changedevice', 'changeregion', 'changeedition', 'help'].includes(commandName)) {
         await interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
     }
+});
+
+// ==================== ERROR HANDLERS ====================
+process.on('unhandledRejection', (error) => {
+    console.error('❌ Unhandled rejection:', error);
+});
+
+process.on('uncaughtException', (error) => {
+    console.error('❌ Uncaught exception:', error);
 });
 
 client.login(TOKEN);
