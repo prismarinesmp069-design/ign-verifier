@@ -108,10 +108,7 @@ async function checkJavaUsername(username) {
 }
 
 async function checkBedrockUsername(username) {
-    // Basic validation for Bedrock
-    if (/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
-        return username;
-    }
+    if (/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) return username;
     return null;
 }
 
@@ -227,7 +224,7 @@ async function verifyMember(member, username, edition, device, region) {
         await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
     } catch(e) {}
     
-    return { success: true, message: `✅ Verified as **${finalUsername}**!\n━━━━━━━━━━━━━━━━━━━━\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}` };
+    return { success: true, message: `✅ Verified as **${finalUsername}**!` };
 }
 
 // ==================== COMMANDS ====================
@@ -246,8 +243,11 @@ async function registerCommands() {
     ];
     
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-    console.log('✅ Commands registered');
+    
+    // Use GLOBAL commands (not guild-specific) - these persist after re-invite
+    await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
+    console.log('✅ Global commands registered');
+    console.log('⏳ Commands may take 5-10 minutes to appear globally');
 }
 
 // ==================== SEND VERIFY INFO EMBED ====================
@@ -290,6 +290,7 @@ client.once('ready', async () => {
     }
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
+    console.log('📌 Commands may take 5-10 minutes to appear. Type /verify to test.');
 });
 
 client.on('guildMemberAdd', async member => {
@@ -330,7 +331,6 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
     
-    // /verify command (anyone can use)
     if (commandName === 'verify') {
         const roles = await setupRoles(guild);
         if (member.roles.cache.has(roles.verified.id)) {
@@ -340,14 +340,12 @@ client.on('interactionCreate', async interaction => {
         return;
     }
     
-    // /verifyinfo command (anyone can use)
     if (commandName === 'verifyinfo') {
         await sendVerifyInfo(channel);
         await interaction.reply({ content: '✅ Verification info sent!', ephemeral: true });
         return;
     }
     
-    // Staff only commands from here
     if (!isStaff) {
         return interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
     }
@@ -367,7 +365,7 @@ client.on('interactionCreate', async interaction => {
         await interaction.editReply({ content: `✅ Sent reminders to ${count} members.` });
     }
     else if (commandName === 'help') {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/verifyinfo** - Send verification instructions\n**/notify** - Send reminder to unverified members\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member's IGN\n**/changedevice @user device** - Change member's device\n**/changeregion @user region** - Change member's region\n**/changeedition @user edition** - Change member's edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** ${Object.values(DEVICES).join(', ')}\n**Regions:** ${Object.values(REGIONS).join(', ')}\n**Editions:** ${Object.values(EDITIONS).join(', ')}`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/verifyinfo** - Send verification instructions\n**/notify** - Send reminder to unverified members\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member's IGN\n**/changedevice @user device** - Change member's device\n**/changeregion @user region** - Change member's region\n**/changeedition @user edition** - Change member's edition`;
         await interaction.reply({ content: helpText, ephemeral: true });
     }
     else if (commandName === 'forceverify') {
@@ -400,9 +398,9 @@ client.on('interactionCreate', async interaction => {
         const target = options.getMember('member');
         const data = db.users[target.id];
         if (data) {
-            await interaction.reply({ content: `**${target.user.tag}**\n━━━━━━━━━━━━━━━━━━━━\n**IGN:** ${data.username}\n**Edition:** ${EDITIONS[data.edition]}\n**Device:** ${DEVICES[data.device]}\n**Region:** ${REGIONS[data.region]}\n**Verified:** ${new Date(data.verifiedAt).toLocaleString()}`, ephemeral: true });
+            await interaction.reply({ content: `**${target.user.tag}**\nIGN: ${data.username}\nEdition: ${EDITIONS[data.edition]}\nDevice: ${DEVICES[data.device]}\nRegion: ${REGIONS[data.region]}`, ephemeral: true });
         } else {
-            await interaction.reply({ content: `${target.user.tag} is not verified.`, ephemeral: true });
+            await interaction.reply({ content: `${target.user.tag} not verified.`, ephemeral: true });
         }
     }
     else if (commandName === 'changedevice') {
@@ -416,7 +414,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.devices[newDevice]);
         data.device = newDevice;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s device to ${DEVICES[newDevice]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed device to ${DEVICES[newDevice]}`, ephemeral: true });
     }
     else if (commandName === 'changeregion') {
         const target = options.getMember('member');
@@ -429,7 +427,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.regions[newRegion]);
         data.region = newRegion;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s region to ${REGIONS[newRegion]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed region to ${REGIONS[newRegion]}`, ephemeral: true });
     }
     else if (commandName === 'changeedition') {
         const target = options.getMember('member');
@@ -442,7 +440,7 @@ client.on('interactionCreate', async interaction => {
         await target.roles.add(roles.editions[newEdition]);
         data.edition = newEdition;
         await saveDB();
-        await interaction.reply({ content: `✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`, ephemeral: true });
+        await interaction.reply({ content: `✅ Changed edition to ${EDITIONS[newEdition]}`, ephemeral: true });
     }
 });
 
