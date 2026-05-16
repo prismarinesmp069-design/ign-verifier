@@ -362,7 +362,7 @@ client.on('messageCreate', async message => {
     
     // !help
     else if (command === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
         await message.reply(helpText);
     }
     
@@ -505,6 +505,56 @@ client.on('messageCreate', async message => {
         saveData();
         
         await message.reply(`✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`);
+    }
+    
+    // !changeign - NEW COMMAND
+    else if (command === 'changeign' && isStaff) {
+        const target = message.mentions.members.first();
+        const newIgn = args[1];
+        
+        if (!target) return message.reply('❌ Please mention a user to change IGN.');
+        if (!newIgn) return message.reply('❌ Please provide the new Minecraft username.');
+        
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified.');
+        
+        // Validate new IGN (allow spaces)
+        if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(newIgn)) {
+            return message.reply('❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.');
+        }
+        
+        const oldIgn = data.username;
+        const oldIgnLower = oldIgn.toLowerCase();
+        
+        // Check if new IGN is already taken by another member
+        if (db.ignToUser[newIgn.toLowerCase()] && db.ignToUser[newIgn.toLowerCase()] !== target.id) {
+            return message.reply('❌ This username is already verified by another member.');
+        }
+        
+        // Update database
+        delete db.ignToUser[oldIgnLower];
+        db.ignToUser[newIgn.toLowerCase()] = target.id;
+        data.username = newIgn;
+        saveData();
+        
+        // Change nickname in Discord
+        try {
+            await target.setNickname(newIgn);
+            await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${newIgn}**`);
+            
+            const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
+            if (logChannel) {
+                logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${newIgn}`);
+            }
+            
+            // Notify the user
+            try {
+                await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${newIgn}\n\nYour nickname has been updated accordingly.`);
+            } catch(e) {}
+            
+        } catch(e) {
+            await message.reply(`✅ Database updated but failed to change nickname: ${e.message}`);
+        }
     }
 });
 
