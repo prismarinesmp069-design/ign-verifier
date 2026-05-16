@@ -17,7 +17,7 @@ const GUILD_ID = process.env.IGN_GUILD_ID;
 
 // ==================== CONFIGURATION ====================
 const VERIFIED_ROLE_NAME = '✅ Verified';
-const PLAYER_ROLE_NAME = '⚔️ Player';
+const PLAYER_ROLE_NAME = 'Player ⚔️';
 const UNVERIFIED_ROLE_NAME = '☘️ Unverified';
 const VERIFY_CHANNEL_NAME = 'verify';
 const LOG_CHANNEL_NAME = 'logs';
