@@ -150,6 +150,7 @@ async function showVerificationModal(interaction, targetMember = null) {
         new ActionRowBuilder().addComponents(regionInput)
     );
     
+    // DIRECT response - NO defer before modal!
     await interaction.showModal(modal);
 }
 
@@ -290,20 +291,17 @@ client.on('guildMemberAdd', async member => {
 
 // ==================== INTERACTION HANDLER ====================
 client.on('interactionCreate', async interaction => {
-    // BUTTON HANDLER
+    // BUTTON HANDLER - NO DEFER HERE!
     if (interaction.isButton() && interaction.customId === 'verify_btn') {
         console.log(`🔘 ${interaction.user.tag} clicked verify button`);
         
-        // IMMEDIATE response to prevent timeout
-        await interaction.deferReply({ ephemeral: true });
-        
         const roles = await setupRoles(interaction.guild);
         if (interaction.member.roles.cache.has(roles.verified.id)) {
-            return interaction.editReply({ content: '❌ You are already verified!' });
+            return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
         }
         
+        // DIRECT modal - no defer!
         await showVerificationModal(interaction);
-        await interaction.deleteReply();
         return;
     }
     
