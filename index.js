@@ -281,39 +281,31 @@ async function verifyMember(member, ign, edition, device, region, staffOverride 
         return { success: false, message: '❌ Failed to set nickname. Bot role needs to be higher.' };
     }
     
-    // Remove unverified role
     if (roles.unverified && member.roles.cache.has(roles.unverified.id)) {
         await member.roles.remove(roles.unverified);
     }
     
-    // Add verified and player roles
     await member.roles.add(roles.verified);
     await member.roles.add(roles.player);
     
-    // Add edition role
     const editionRoleKey = `edition_${edition}`;
     if (roles[editionRoleKey]) await member.roles.add(roles[editionRoleKey]);
     
-    // Add device role
     const deviceRoleKey = `device_${device}`;
     if (roles[deviceRoleKey]) await member.roles.add(roles[deviceRoleKey]);
     
-    // Add region role
     const regionRoleKey = `region_${region}`;
     if (roles[regionRoleKey]) await member.roles.add(roles[regionRoleKey]);
     
-    // Save to database
     ignData[member.id] = { ign, edition, device, region, verifiedAt: new Date().toISOString() };
     ignToUser[ign] = member.id;
     delete lastReminder[member.id];
     saveData();
     
-    // Log to channel
     if (roles.logChannel) {
         roles.logChannel.send(`✅ **${member.user.tag}** verified as **${ign}** (${edition} | ${device} | ${region}) ${staffOverride ? '(by staff)' : ''}`);
     }
     
-    // Send success message in channel
     try {
         await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${ign}\n**Edition:** ${edition === 'java' ? '☕ Java' : '🟩 Bedrock'}\n**Device:** ${DEVICE_ROLES[device].name}\n**Region:** ${REGION_ROLES[region].name}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
     } catch(e) {}
@@ -357,19 +349,16 @@ client.once('ready', async () => {
     const roles = await setupRoles(guild);
     await registerCommands();
     
-    // Process existing members - give unverified role to anyone without verified role
     const members = await guild.members.fetch();
     let existingCount = 0;
     
     for (const member of members.values()) {
         if (member.user.bot) continue;
         if (!member.roles.cache.has(roles.verified.id)) {
-            // Add unverified role to existing members
             if (!member.roles.cache.has(roles.unverified.id)) {
                 await member.roles.add(roles.unverified);
                 existingCount++;
             }
-            // Send DM notification (only once)
             if (!ignData[member.id]) {
                 try {
                     await member.send(`**🔐 ${guild.name} - Verification Required**\n━━━━━━━━━━━━━━━━━━━━\nTo regain access to the server, please verify your Minecraft account by clicking the button in #${VERIFY_CHANNEL_NAME}.\n\nYou will need:\n• Your Minecraft username\n• Your game edition\n• Your device\n• Your region\n━━━━━━━━━━━━━━━━━━━━\nClick the "VERIFY NOW" button in #${VERIFY_CHANNEL_NAME} to start.`);
@@ -383,7 +372,6 @@ client.once('ready', async () => {
     saveData();
     console.log(`📊 Processed ${existingCount} existing members - gave them ☘️ Unverified role`);
     
-    // Reminder loop
     setInterval(() => sendReminders(guild), 60 * 1000);
     
     console.log('✅ Ready');
@@ -403,7 +391,6 @@ client.on('guildMemberAdd', async member => {
 // ==================== BUTTON HANDLER ====================
 client.on('interactionCreate', async interaction => {
     if (interaction.isButton() && interaction.customId === 'verify_button') {
-        // Check if user is already verified
         const roles = await setupRoles(interaction.guild);
         if (interaction.member.roles.cache.has(roles.verified.id)) {
             return interaction.reply({ content: '❌ You are already verified!', ephemeral: true });
@@ -428,13 +415,21 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, guild } = interaction;
     const isStaff = member.permissions.has('Administrator') || member.roles.cache.some(r => ['Staff', 'Mod', 'Admin'].includes(r.name));
     
+    // /sendverify command (fixed - no timeout)
     if (commandName === 'sendverify' && isStaff) {
         const channel = interaction.channel;
         if (channel.name !== VERIFY_CHANNEL_NAME) {
             return interaction.reply({ content: `❌ Use this command in #${VERIFY_CHANNEL_NAME} channel.`, ephemeral: true });
         }
-        await sendVerifyMessage(channel);
-        await interaction.reply({ content: '✅ Verification button message sent!', ephemeral: true });
+        // Acknowledge immediately to avoid timeout
+        await interaction.deferReply({ ephemeral: true });
+        try {
+            await sendVerifyMessage(channel);
+            await interaction.editReply({ content: '✅ Verification button message sent and pinned!' });
+        } catch (error) {
+            console.error('Error sending verify message:', error);
+            await interaction.editReply({ content: '❌ Failed to send verification message. Check bot permissions.' });
+        }
     }
     else if (commandName === 'help' && isStaff) {
         const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**/sendverify** - Send verification button message in current channel\n**/forceverify @user** - Force verify a member\n**/unverify @user** - Remove verification\n**/checkign @user** - Check member's IGN\n**/changedevice @user device** - Change member's device\n**/changeregion @user region** - Change member's region\n**/changeedition @user edition** - Change member's edition\n━━━━━━━━━━━━━━━━━━━━\n**Available Devices:** ${Object.values(DEVICE_ROLES).map(d => d.name).join(', ')}\n**Available Regions:** ${Object.values(REGION_ROLES).map(r => r.name).join(', ')}\n**Editions:** ☕ Java Edition, 🟩 Bedrock Edition`;
@@ -457,7 +452,6 @@ client.on('interactionCreate', async interaction => {
         await target.roles.remove(roles.player);
         if (roles.unverified) await target.roles.add(roles.unverified);
         
-        // Remove edition/device/region roles
         for (const role of Object.values(roles)) {
             if (role && target.roles.cache.has(role.id) && 
                 role.name !== roles.unverified.name && 
@@ -467,7 +461,6 @@ client.on('interactionCreate', async interaction => {
             }
         }
         
-        // Reset nickname
         try { await target.setNickname(null); } catch(e) {}
         
         const oldIgn = ignData[target.id]?.ign;
