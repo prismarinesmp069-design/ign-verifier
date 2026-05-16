@@ -22,11 +22,11 @@ const GUILD_ID = process.env.IGN_GUILD_ID;
 
 const VERIFY_CHANNEL = 'verify';
 
-// ==================== MODAL WITH 4 FIELDS ====================
+// ==================== MODAL WITH 4 FIELDS (Short Labels) ====================
 async function showModal(interaction) {
     const modal = new ModalBuilder()
         .setCustomId('test_modal')
-        .setTitle('Minecraft Account Verification');
+        .setTitle('Minecraft Verification');
     
     const usernameInput = new TextInputBuilder()
         .setCustomId('username')
@@ -37,24 +37,24 @@ async function showModal(interaction) {
     
     const editionInput = new TextInputBuilder()
         .setCustomId('edition')
-        .setLabel('Edition (java / bedrock)')
+        .setLabel('Edition (java/bedrock)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Type "java" or "bedrock"');
+        .setPlaceholder('Type java or bedrock');
     
     const deviceInput = new TextInputBuilder()
         .setCustomId('device')
-        .setLabel('Device (mobile / pc / controller / playstation / switch)')
+        .setLabel('Device')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your device');
+        .setPlaceholder('mobile/pc/controller/playstation/switch');
     
     const regionInput = new TextInputBuilder()
         .setCustomId('region')
-        .setLabel('Region (asia / europe / america / africa / oceania)')
+        .setLabel('Region')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your region');
+        .setPlaceholder('asia/europe/america/africa/oceania');
     
     modal.addComponents(
         new ActionRowBuilder().addComponents(usernameInput),
@@ -125,7 +125,7 @@ client.on('interactionCreate', async interaction => {
         
         await interaction.reply({ 
             content: `✅ **Form Submitted Successfully!**\n━━━━━━━━━━━━━━━━━━━━\n**Username:** ${username}\n**Edition:** ${edition}\n**Device:** ${device}\n**Region:** ${region}\n━━━━━━━━━━━━━━━━━━━━\n(Full verification will be added next)`, 
-            ephemeral: true 
+            flags: 64  // ephemeral
         });
         return;
     }
@@ -138,13 +138,13 @@ client.on('interactionCreate', async interaction => {
     
     if (commandName === 'sendverify' && isStaff) {
         if (channel.name !== VERIFY_CHANNEL) {
-            return interaction.reply({ content: `❌ Use in #${VERIFY_CHANNEL}`, ephemeral: true });
+            return interaction.reply({ content: `❌ Use in #${VERIFY_CHANNEL}`, flags: 64 });
         }
         await sendVerifyButton(channel);
-        await interaction.reply({ content: '✅ Verification button sent!', ephemeral: true });
+        await interaction.reply({ content: '✅ Verification button sent!', flags: 64 });
     }
     else if (commandName === 'sendverify' && !isStaff) {
-        await interaction.reply({ content: '❌ Staff only command.', ephemeral: true });
+        await interaction.reply({ content: '❌ Staff only command.', flags: 64 });
     }
 });
 
