@@ -85,7 +85,7 @@ async function showModal(interaction, targetId = null) {
         .setLabel('Minecraft Username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your Minecraft username');
+        .setPlaceholder('Enter your Minecraft username (spaces allowed)');
     
     const editionInput = new TextInputBuilder()
         .setCustomId('edition')
@@ -137,8 +137,9 @@ async function verifyMember(member, username, edition, device, region, isForce =
         return { success: false, message: '❌ Already verified!' };
     }
     
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
-        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, or underscores.' };
+    // Allow spaces for Bedrock usernames, letters, numbers, underscores
+    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
+        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
     }
     
     edition = edition.toLowerCase();
@@ -169,7 +170,16 @@ async function verifyMember(member, username, edition, device, region, isForce =
         finalUsername = mojangName;
     }
     
-    try { await member.setNickname(finalUsername); } catch(e) {}
+    // CHANGE NICKNAME - This requires bot role to be HIGHER than member's highest role
+    let nicknameChanged = false;
+    try {
+        await member.setNickname(finalUsername);
+        nicknameChanged = true;
+        console.log(`✅ Nickname changed for ${member.user.tag} to: ${finalUsername}`);
+    } catch(e) {
+        console.log(`❌ Failed to change nickname for ${member.user.tag}: ${e.message}`);
+        console.log(`💡 Make sure bot role is ABOVE member roles in Server Settings → Roles`);
+    }
     
     if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
         await member.roles.remove(unverifiedRole);
@@ -191,18 +201,23 @@ async function verifyMember(member, username, edition, device, region, isForce =
         logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
     }
     
+    let message = `✅ Verified as **${finalUsername}**!`;
+    if (!nicknameChanged) {
+        message += `\n\n⚠️ **Nickname could not be changed.**\nPlease ask a staff member to move the bot's role **ABOVE** your roles in Server Settings → Roles.`;
+    }
+    
     try {
         await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
     } catch(e) {}
     
-    return { success: true, message: `✅ Verified as **${finalUsername}**!` };
+    return { success: true, message: message };
 }
 
 // ==================== SEND BUTTON ====================
 async function sendVerifyButton(channel) {
     const embed = new EmbedBuilder()
         .setTitle('🔐 MINECRAFT VERIFICATION')
-        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (java/bedrock)\n• Your device\n• Your region')
+        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username (spaces allowed for Bedrock)\n• Your game edition (java/bedrock)\n• Your device\n• Your region')
         .setColor(0x2ECC71);
     
     const row = new ActionRowBuilder().addComponents(
@@ -284,6 +299,9 @@ client.once('ready', async () => {
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
     console.log('📌 Staff use /sendverify in #verify');
+    console.log('');
+    console.log('⚠️ IMPORTANT: For nickname changes to work, the bot role must be ABOVE member roles in:');
+    console.log('   Server Settings → Roles → Drag bot role to the top');
     
     setInterval(() => sendReminders(guild), 60 * 1000);
 });
