@@ -135,9 +135,9 @@ async function verifyMember(member, username, edition, device, region) {
         return { success: false, message: '❌ Already verified!' };
     }
     
-    if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
-        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, or underscores.' };
-    }
+    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
+    return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
+}
     
     edition = edition.toLowerCase();
     if (edition !== 'java' && edition !== 'bedrock') {
