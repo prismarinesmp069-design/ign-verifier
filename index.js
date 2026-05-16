@@ -196,21 +196,49 @@ async function verifyMember(member, username, edition, device, region) {
     return { success: true, message: `✅ Verified as **${finalUsername}**!` };
 }
 
-// ==================== SEND BUTTON ====================
+// ==================== SEND BUTTON (PROFESSIONAL WITH SERVER ICON) ====================
 async function sendVerifyButton(channel) {
+    const guild = channel.guild;
+    const serverIcon = guild.iconURL({ dynamic: true, size: 256 });
+    
     const embed = new EmbedBuilder()
-        .setTitle('🔐 MINECRAFT VERIFICATION')
-        .setDescription('Click the button below to verify your Minecraft account.')
-        .setColor(0x2ECC71);
+        .setTitle(`🔐 ${guild.name} - Verification`)
+        .setDescription([
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '**✅ Click the button below to verify your Minecraft account**',
+            '',
+            '**📋 WHAT YOU NEED:**',
+            '```',
+            '• Minecraft Username',
+            '• Game Edition (Java / Bedrock)',
+            '• Device (Mobile / PC / Controller / PlayStation / Switch)',
+            '• Region (Asia / Europe / America / Africa / Oceania)',
+            '```',
+            '**⚡ WHAT YOU GET:**',
+            '```',
+            '• Full access to all channels',
+            '• ✅ Verified role',
+            '• ⚔️ Player role',
+            '• Edition, Device & Region roles',
+            '```',
+            '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
+            '*Verification ensures a safe and secure community*'
+        ].join('\n'))
+        .setColor(0x2ECC71)
+        .setThumbnail(serverIcon)
+        .setFooter({ text: `${guild.name} | Verification System`, iconURL: serverIcon })
+        .setTimestamp();
     
     const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
             .setCustomId('verify_btn')
             .setLabel('✅ VERIFY NOW')
             .setStyle(ButtonStyle.Success)
+            .setEmoji('✅')
     );
     
-    await channel.send({ embeds: [embed], components: [row] });
+    const msg = await channel.send({ embeds: [embed], components: [row] });
+    await msg.pin().catch(() => {});
 }
 
 // ==================== NOTIFY UNVERIFIED ====================
