@@ -274,12 +274,24 @@ async function notifyUnverified(guild, message) {
     
     const members = await guild.members.fetch();
     let count = 0;
+    const VERIFY_CHANNEL_ID = guild.channels.cache.find(c => c.name === VERIFY_CHANNEL)?.id;
     
     for (const member of members.values()) {
         if (member.user.bot) continue;
         if (member.roles.cache.has(unverifiedRole.id)) {
             try {
-                await member.send(`**🔐 Verification Required**\nClick the button in #${VERIFY_CHANNEL} to verify your Minecraft account.`);
+                const reminderEmbed = {
+                    color: 0xFFA500,
+                    title: '🔔 VERIFICATION REMINDER',
+                    description: `Please verify your Minecraft account to access **${guild.name}**.`,
+                    fields: [
+                        { name: '📝 How to Verify', value: `Click the **VERIFY NOW** button in <#${VERIFY_CHANNEL_ID}>`, inline: false },
+                        { name: '✅ What You Get', value: 'Full access to all channels • PvP queue • Leaderboards', inline: false }
+                    ],
+                    footer: { text: 'Takes less than 1 minute!' },
+                    timestamp: new Date()
+                };
+                await member.send({ embeds: [reminderEmbed] });
                 count++;
                 await new Promise(r => setTimeout(r, 500));
             } catch(e) {}
