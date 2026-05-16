@@ -73,7 +73,7 @@ async function checkJavaUsername(username) {
 }
 
 // ==================== MODAL ====================
-async function showModal(interaction, targetId = null) {
+async function showVerificationModal(interaction, targetId = null) {
     const modalId = targetId ? `verify_modal:${targetId}` : 'verify_modal';
     
     const modal = new ModalBuilder()
@@ -85,11 +85,11 @@ async function showModal(interaction, targetId = null) {
         .setLabel('Minecraft Username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your Minecraft username (spaces allowed)');
+        .setPlaceholder('Enter your Minecraft username');
     
     const editionInput = new TextInputBuilder()
         .setCustomId('edition')
-        .setLabel('Edition (java/bedrock)')
+        .setLabel('Edition (java / bedrock)')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
         .setPlaceholder('Type java or bedrock');
@@ -99,14 +99,14 @@ async function showModal(interaction, targetId = null) {
         .setLabel('Device')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('mobile/pc/controller/playstation/switch');
+        .setPlaceholder('mobile / pc / controller / playstation / switch');
     
     const regionInput = new TextInputBuilder()
         .setCustomId('region')
         .setLabel('Region')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('asia/europe/america/africa/oceania');
+        .setPlaceholder('asia / europe / america / africa / oceania');
     
     modal.addComponents(
         new ActionRowBuilder().addComponents(usernameInput),
@@ -137,9 +137,8 @@ async function verifyMember(member, username, edition, device, region, isForce =
         return { success: false, message: '❌ Already verified!' };
     }
     
-    // Allow spaces for Bedrock usernames, letters, numbers, underscores
-    if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
-        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
+    if (!/^[a-zA-Z0-9_]{3,16}$/.test(username)) {
+        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, or underscores.' };
     }
     
     edition = edition.toLowerCase();
@@ -170,16 +169,7 @@ async function verifyMember(member, username, edition, device, region, isForce =
         finalUsername = mojangName;
     }
     
-    // CHANGE NICKNAME - This requires bot role to be HIGHER than member's highest role
-    let nicknameChanged = false;
-    try {
-        await member.setNickname(finalUsername);
-        nicknameChanged = true;
-        console.log(`✅ Nickname changed for ${member.user.tag} to: ${finalUsername}`);
-    } catch(e) {
-        console.log(`❌ Failed to change nickname for ${member.user.tag}: ${e.message}`);
-        console.log(`💡 Make sure bot role is ABOVE member roles in Server Settings → Roles`);
-    }
+    try { await member.setNickname(finalUsername); } catch(e) {}
     
     if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
         await member.roles.remove(unverifiedRole);
@@ -201,23 +191,18 @@ async function verifyMember(member, username, edition, device, region, isForce =
         logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
     }
     
-    let message = `✅ Verified as **${finalUsername}**!`;
-    if (!nicknameChanged) {
-        message += `\n\n⚠️ **Nickname could not be changed.**\nPlease ask a staff member to move the bot's role **ABOVE** your roles in Server Settings → Roles.`;
-    }
-    
     try {
-        await member.send(`✅ **Welcome to ${guild.name}!**\n━━━━━━━━━━━━━━━━━━━━\n**Minecraft Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}\n━━━━━━━━━━━━━━━━━━━━\nYou now have access to all channels.`);
+        await member.send(`✅ **Welcome!**\n━━━━━━━━━━━━━━━━━━━━\n**Username:** ${finalUsername}\n**Edition:** ${EDITIONS[edition]}\n**Device:** ${DEVICES[device]}\n**Region:** ${REGIONS[region]}`);
     } catch(e) {}
     
-    return { success: true, message: message };
+    return { success: true, message: `✅ Verified as **${finalUsername}**!` };
 }
 
 // ==================== SEND BUTTON ====================
 async function sendVerifyButton(channel) {
     const embed = new EmbedBuilder()
         .setTitle('🔐 MINECRAFT VERIFICATION')
-        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username (spaces allowed for Bedrock)\n• Your game edition (java/bedrock)\n• Your device\n• Your region')
+        .setDescription('Click the button below to verify your Minecraft account.\n\n**You will need:**\n• Your Minecraft username\n• Your game edition (java/bedrock)\n• Your device\n• Your region')
         .setColor(0x2ECC71);
     
     const row = new ActionRowBuilder().addComponents(
@@ -298,10 +283,7 @@ client.once('ready', async () => {
     }
     
     console.log(`✅ Ready | Gave ☘️ Unverified to ${count} members`);
-    console.log('📌 Staff use /sendverify in #verify');
-    console.log('');
-    console.log('⚠️ IMPORTANT: For nickname changes to work, the bot role must be ABOVE member roles in:');
-    console.log('   Server Settings → Roles → Drag bot role to the top');
+    console.log('📌 Staff commands: /sendverify, /notify, /help, /stats, /forceverify, /unverify, /checkign, /changedevice, /changeregion, /changeedition');
     
     setInterval(() => sendReminders(guild), 60 * 1000);
 });
@@ -323,7 +305,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: '❌ You are already verified!', flags: 64 });
         }
         
-        await showModal(interaction);
+        await showVerificationModal(interaction);
         return;
     }
     
@@ -356,7 +338,7 @@ client.on('interactionCreate', async interaction => {
     const { commandName, options, member, channel, guild } = interaction;
     const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
     
-    if (!isStaff && commandName !== 'sendverify') {
+    if (!isStaff) {
         return interaction.reply({ content: '❌ Staff only command.', flags: 64 });
     }
     
@@ -411,7 +393,7 @@ client.on('interactionCreate', async interaction => {
     // /forceverify
     else if (commandName === 'forceverify') {
         const target = options.getMember('member');
-        await showModal(interaction, target.id);
+        await showVerificationModal(interaction, target.id);
     }
     
     // /unverify
