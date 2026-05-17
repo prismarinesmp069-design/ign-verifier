@@ -343,10 +343,37 @@ client.on('messageCreate', async message => {
     const member = message.member;
     const channel = message.channel;
     
-    const isStaff = member.permissions.has(PermissionsBitField.Flags.Administrator);
+    // Permission levels
+    const isOwner = message.author.id === message.guild.ownerId;
+    const hasAdminRole = member.roles.cache.some(r => r.name === '🛡️ Admin');
+    const hasStaffRole = member.roles.cache.some(r => ['🛡️ Admin', '🔨 Moderator', '🪖 Junior Moderator', '🤝 Helper'].includes(r.name));
+    const hasCreatorRole = member.roles.cache.some(r => r.name === '🎥 Creator');
+    
+    // Creator has NO permissions (cannot use any staff commands)
+    if (hasCreatorRole && !isOwner) {
+        return; // Creator can't use any staff commands
+    }
+    
+    // Staff nickname commands (only Owner or 🛡️ Admin)
+    const staffNickCommands = ['setadmin', 'setmod', 'setjrmod', 'sethelper', 'setcreator', 'removestaffnick'];
+    
+    // Regular staff commands
+    const regularStaffCommands = ['sendverify', 'notify', 'stats', 'forceverify', 'unverify', 'checkign', 'changeign', 'changedevice', 'changeregion', 'changeedition', 'help'];
+    
+    // Check staff nickname commands permission
+    if (staffNickCommands.includes(command)) {
+        if (!isOwner && !hasAdminRole) {
+            return message.reply('❌ Only the Server Owner or members with 🛡️ Admin role can change staff nicknames.');
+        }
+    }
+    
+    // Check regular staff commands permission
+    if (regularStaffCommands.includes(command) && !hasStaffRole) {
+        return message.reply('❌ You need a staff role to use this command.');
+    }
     
     // !sendverify
-    if (command === 'sendverify' && isStaff) {
+    if (command === 'sendverify') {
         if (channel.name !== VERIFY_CHANNEL) {
             return message.reply(`❌ Use this command in #${VERIFY_CHANNEL}`);
         }
@@ -355,19 +382,19 @@ client.on('messageCreate', async message => {
     }
     
     // !notify
-    else if (command === 'notify' && isStaff) {
+    else if (command === 'notify') {
         await message.reply('📨 Sending reminders...');
         await notifyUnverified(guild, message);
     }
     
     // !help
-    else if (command === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set 🛡️ ADMIN nickname\n**${PREFIX}setmod @user** - Set 🔨 MODERATOR nickname\n**${PREFIX}setjrmod @user** - Set 🪖 JR MODERATOR nickname\n**${PREFIX}sethelper @user** - Set 🤝 HELPER nickname\n**${PREFIX}setcreator @user** - Set 🎥 CREATOR nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+    else if (command === 'help') {
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set 🛡️ ADMIN nickname (Owner/🛡️ Admin only)\n**${PREFIX}setmod @user** - Set 🔨 MODERATOR nickname (Owner/🛡️ Admin only)\n**${PREFIX}setjrmod @user** - Set 🪖 JR MODERATOR nickname (Owner/🛡️ Admin only)\n**${PREFIX}sethelper @user** - Set 🤝 HELPER nickname (Owner/🛡️ Admin only)\n**${PREFIX}setcreator @user** - Set 🎥 CREATOR nickname (Owner/🛡️ Admin only)\n**${PREFIX}removestaffnick @user** - Remove staff nickname (Owner/🛡️ Admin only)\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock\n━━━━━━━━━━━━━━━━━━━━\n*🎥 Creator role has no staff permissions*`;
         await message.reply(helpText);
     }
     
     // !stats
-    else if (command === 'stats' && isStaff) {
+    else if (command === 'stats') {
         const verifiedRole = await getRole(guild, VERIFIED_ROLE);
         const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
         const members = await guild.members.fetch();
@@ -383,7 +410,7 @@ client.on('messageCreate', async message => {
     }
     
     // !forceverify
-    else if (command === 'forceverify' && isStaff) {
+    else if (command === 'forceverify') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user to force verify.');
         
@@ -398,7 +425,7 @@ client.on('messageCreate', async message => {
     }
     
     // !unverify
-    else if (command === 'unverify' && isStaff) {
+    else if (command === 'unverify') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user to unverify.');
         
@@ -432,7 +459,7 @@ client.on('messageCreate', async message => {
     }
     
     // !checkign
-    else if (command === 'checkign' && isStaff) {
+    else if (command === 'checkign') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user to check.');
         
@@ -445,7 +472,7 @@ client.on('messageCreate', async message => {
     }
     
     // !changedevice
-    else if (command === 'changedevice' && isStaff) {
+    else if (command === 'changedevice') {
         const target = message.mentions.members.first();
         const newDevice = args[1];
         if (!target || !newDevice) return message.reply('❌ Usage: !changedevice @user device');
@@ -466,7 +493,7 @@ client.on('messageCreate', async message => {
     }
     
     // !changeregion
-    else if (command === 'changeregion' && isStaff) {
+    else if (command === 'changeregion') {
         const target = message.mentions.members.first();
         const newRegion = args[1];
         if (!target || !newRegion) return message.reply('❌ Usage: !changeregion @user region');
@@ -487,7 +514,7 @@ client.on('messageCreate', async message => {
     }
     
     // !changeedition
-    else if (command === 'changeedition' && isStaff) {
+    else if (command === 'changeedition') {
         const target = message.mentions.members.first();
         const newEdition = args[1];
         if (!target || !newEdition) return message.reply('❌ Usage: !changeedition @user edition');
@@ -508,7 +535,7 @@ client.on('messageCreate', async message => {
     }
     
     // !changeign
-    else if (command === 'changeign' && isStaff) {
+    else if (command === 'changeign') {
         const target = message.mentions.members.first();
         const newIgn = args[1];
         
@@ -555,13 +582,15 @@ client.on('messageCreate', async message => {
     // ==================== STAFF NICKNAME COMMANDS ====================
     
     // !setadmin @user
-    else if (command === 'setadmin' && isStaff) {
+    else if (command === 'setadmin') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
-        const newNick = `🛡️ ADMIN • ${cleanName}`;
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified. They need to verify their Minecraft account first.');
+        
+        const minecraftIGN = data.username;
+        const newNick = `🛡️ ADMIN • ${minecraftIGN}`;
         
         try {
             await target.setNickname(newNick);
@@ -578,13 +607,15 @@ client.on('messageCreate', async message => {
     }
     
     // !setmod @user
-    else if (command === 'setmod' && isStaff) {
+    else if (command === 'setmod') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
-        const newNick = `🔨 MODERATOR • ${cleanName}`;
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified. They need to verify their Minecraft account first.');
+        
+        const minecraftIGN = data.username;
+        const newNick = `🔨 MODERATOR • ${minecraftIGN}`;
         
         try {
             await target.setNickname(newNick);
@@ -601,13 +632,15 @@ client.on('messageCreate', async message => {
     }
     
     // !setjrmod @user
-    else if (command === 'setjrmod' && isStaff) {
+    else if (command === 'setjrmod') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
-        const newNick = `🪖 JR MODERATOR • ${cleanName}`;
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified. They need to verify their Minecraft account first.');
+        
+        const minecraftIGN = data.username;
+        const newNick = `🪖 JR MODERATOR • ${minecraftIGN}`;
         
         try {
             await target.setNickname(newNick);
@@ -624,13 +657,15 @@ client.on('messageCreate', async message => {
     }
     
     // !sethelper @user
-    else if (command === 'sethelper' && isStaff) {
+    else if (command === 'sethelper') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
-        const newNick = `🤝 HELPER • ${cleanName}`;
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified. They need to verify their Minecraft account first.');
+        
+        const minecraftIGN = data.username;
+        const newNick = `🤝 HELPER • ${minecraftIGN}`;
         
         try {
             await target.setNickname(newNick);
@@ -647,13 +682,15 @@ client.on('messageCreate', async message => {
     }
     
     // !setcreator @user
-    else if (command === 'setcreator' && isStaff) {
+    else if (command === 'setcreator') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
-        const newNick = `🎥 CREATOR • ${cleanName}`;
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified. They need to verify their Minecraft account first.');
+        
+        const minecraftIGN = data.username;
+        const newNick = `🎥 CREATOR • ${minecraftIGN}`;
         
         try {
             await target.setNickname(newNick);
@@ -670,16 +707,18 @@ client.on('messageCreate', async message => {
     }
     
     // !removestaffnick @user
-    else if (command === 'removestaffnick' && isStaff) {
+    else if (command === 'removestaffnick') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        const currentNick = target.displayName;
-        const cleanName = currentNick.replace(/^(🛡️ ADMIN • |🔨 MODERATOR • |🪖 JR MODERATOR • |🤝 HELPER • |🎥 CREATOR • )/, '');
+        const data = db.users[target.id];
+        if (!data) return message.reply('❌ Member not verified.');
+        
+        const minecraftIGN = data.username;
         
         try {
-            await target.setNickname(cleanName);
-            await message.reply(`✅ Removed staff nickname from ${target.user.tag}, reverted to **${cleanName}**`);
+            await target.setNickname(minecraftIGN);
+            await message.reply(`✅ Removed staff nickname from ${target.user.tag}, reverted to **${minecraftIGN}**`);
             
             if (db.staffNicks) delete db.staffNicks[target.id];
             saveData();
