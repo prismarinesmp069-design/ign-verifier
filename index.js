@@ -63,17 +63,7 @@ async function getRole(guild, name) {
     return guild.roles.cache.find(r => r.name === name);
 }
 
-// ==================== MOJANG API ====================
-async function checkJavaUsername(username) {
-    try {
-        const res = await fetch(`https://api.mojang.com/users/profiles/minecraft/${username}`);
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.name;
-    } catch(e) { return null; }
-}
-
-// ==================== MODAL (ONLY USERNAME NOW) ====================
+// ==================== MODAL (ONLY USERNAME) ====================
 async function showModal(interaction) {
     const modal = new ModalBuilder()
         .setCustomId('verify_modal')
@@ -84,7 +74,7 @@ async function showModal(interaction) {
         .setLabel('Minecraft Username')
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
-        .setPlaceholder('Enter your Minecraft username');
+        .setPlaceholder('Enter your Minecraft username (Java or Bedrock)');
     
     modal.addComponents(
         new ActionRowBuilder().addComponents(usernameInput)
@@ -93,7 +83,7 @@ async function showModal(interaction) {
     await interaction.showModal(modal);
 }
 
-// ==================== VERIFY MEMBER (SIMPLIFIED - NO DEVICE/REGION/EDITION) ====================
+// ==================== VERIFY MEMBER (NO MOJANG CHECK - BEDROCK FRIENDLY) ====================
 async function verifyMember(member, username) {
     const guild = member.guild;
     
@@ -109,6 +99,7 @@ async function verifyMember(member, username) {
         return { success: false, message: '❌ Already verified!' };
     }
     
+    // Validate username format (allows spaces for Bedrock)
     if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
         return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
     }
@@ -118,13 +109,8 @@ async function verifyMember(member, username) {
         return { success: false, message: '❌ This username is already verified by another member.' };
     }
     
-    // Check Java username exists (skip if you want to allow any username)
-    let finalUsername = username;
-    const mojangName = await checkJavaUsername(username);
-    if (!mojangName) {
-        return { success: false, message: '❌ Minecraft username does not exist on Mojang. Please check spelling.' };
-    }
-    finalUsername = mojangName;
+    // NO MOJANG API CHECK - Accept any valid username (Java OR Bedrock)
+    const finalUsername = username;
     
     // Change nickname to IGN
     try { await member.setNickname(finalUsername); } catch(e) {
@@ -195,7 +181,7 @@ async function sendVerifyButton(channel) {
             '',
             '**📋 WHAT YOU NEED:**',
             '```',
-            '• Minecraft Username (Java Edition only)',
+            '• Minecraft Username (Java OR Bedrock)',
             '```',
             '**⚡ WHAT YOU GET:**',
             '```',
@@ -319,7 +305,7 @@ client.on('messageCreate', async message => {
     
     // !help
     else if (command === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set ADMIN • nickname\n**${PREFIX}setmod @user** - Set MODERATOR • nickname\n**${PREFIX}setjrmod @user** - Set JR MODERATOR • nickname\n**${PREFIX}sethelper @user** - Set HELPER • nickname\n**${PREFIX}setcreator @user** - Set CREATOR • nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n━━━━━━━━━━━━━━━━━━━━\n**Verification now only requires your Minecraft IGN!**`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set ADMIN • nickname\n**${PREFIX}setmod @user** - Set MODERATOR • nickname\n**${PREFIX}setjrmod @user** - Set JR MODERATOR • nickname\n**${PREFIX}sethelper @user** - Set HELPER • nickname\n**${PREFIX}setcreator @user** - Set CREATOR • nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n━━━━━━━━━━━━━━━━━━━━\n**Verification now accepts Java AND Bedrock usernames!**`;
         await message.reply(helpText);
     }
     
@@ -373,6 +359,9 @@ client.on('messageCreate', async message => {
         const playerRole = await getRole(guild, PLAYER_ROLE);
         if (playerRole && target.roles.cache.has(playerRole.id)) await target.roles.remove(playerRole);
         
+        // Reset nickname
+        try { await target.setNickname(null); } catch(e) {}
+        
         delete db.users[target.id];
         saveData();
         
@@ -392,7 +381,7 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !changeign
+    // !changeign (NO MOJANG CHECK)
     else if (command === 'changeign' && isStaff) {
         const target = message.mentions.members.first();
         const newIgn = args[1];
@@ -414,28 +403,24 @@ client.on('messageCreate', async message => {
             return message.reply('❌ This username is already verified by another member.');
         }
         
-        // Verify new IGN exists on Mojang
-        const mojangName = await checkJavaUsername(newIgn);
-        if (!mojangName) {
-            return message.reply('❌ Minecraft username does not exist on Mojang. Please check spelling.');
-        }
+        // NO MOJANG CHECK - Accept any valid username
         
         delete db.ignToUser[oldIgnLower];
-        db.ignToUser[mojangName.toLowerCase()] = target.id;
-        data.username = mojangName;
+        db.ignToUser[newIgn.toLowerCase()] = target.id;
+        data.username = newIgn;
         saveData();
         
         try {
-            await target.setNickname(mojangName);
-            await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${mojangName}**`);
+            await target.setNickname(newIgn);
+            await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${newIgn}**`);
             
             const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
             if (logChannel) {
-                logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${mojangName}`);
+                logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${newIgn}`);
             }
             
             try {
-                await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${mojangName}\n\nYour nickname has been updated accordingly.`);
+                await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${newIgn}\n\nYour nickname has been updated accordingly.`);
             } catch(e) {}
             
         } catch(e) {
