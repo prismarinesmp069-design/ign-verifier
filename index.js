@@ -28,6 +28,7 @@ const UNVERIFIED_ROLE = '☘️ Unverified';
 const VERIFY_CHANNEL = 'verify';
 const LOG_CHANNEL = 'logs';
 
+// Keep these for staff commands (if you still want to assign them manually)
 const EDITIONS = {
     'java': '☕ Java Edition',
     'bedrock': '🟩 Bedrock Edition'
@@ -72,7 +73,7 @@ async function checkJavaUsername(username) {
     } catch(e) { return null; }
 }
 
-// ==================== MODAL ====================
+// ==================== MODAL (ONLY USERNAME NOW) ====================
 async function showModal(interaction) {
     const modal = new ModalBuilder()
         .setCustomId('verify_modal')
@@ -85,47 +86,20 @@ async function showModal(interaction) {
         .setRequired(true)
         .setPlaceholder('Enter your Minecraft username');
     
-    const editionInput = new TextInputBuilder()
-        .setCustomId('edition')
-        .setLabel('Edition (java/bedrock)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setPlaceholder('Type java or bedrock');
-    
-    const deviceInput = new TextInputBuilder()
-        .setCustomId('device')
-        .setLabel('Device')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setPlaceholder('mobile/pc/controller/playstation/switch');
-    
-    const regionInput = new TextInputBuilder()
-        .setCustomId('region')
-        .setLabel('Region')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setPlaceholder('asia/europe/america/africa/oceania');
-    
     modal.addComponents(
-        new ActionRowBuilder().addComponents(usernameInput),
-        new ActionRowBuilder().addComponents(editionInput),
-        new ActionRowBuilder().addComponents(deviceInput),
-        new ActionRowBuilder().addComponents(regionInput)
+        new ActionRowBuilder().addComponents(usernameInput)
     );
     
     await interaction.showModal(modal);
 }
 
-// ==================== VERIFY MEMBER ====================
-async function verifyMember(member, username, edition, device, region) {
+// ==================== VERIFY MEMBER (SIMPLIFIED - NO DEVICE/REGION/EDITION) ====================
+async function verifyMember(member, username) {
     const guild = member.guild;
     
     const verifiedRole = await getRole(guild, VERIFIED_ROLE);
     const playerRole = await getRole(guild, PLAYER_ROLE);
     const unverifiedRole = await getRole(guild, UNVERIFIED_ROLE);
-    const editionRole = await getRole(guild, EDITIONS[edition]);
-    const deviceRole = await getRole(guild, DEVICES[device]);
-    const regionRole = await getRole(guild, REGIONS[region]);
     
     if (!verifiedRole || !playerRole) {
         return { success: false, message: '❌ Required roles not found. Please contact staff.' };
@@ -136,60 +110,49 @@ async function verifyMember(member, username, edition, device, region) {
     }
     
     if (!/^[a-zA-Z0-9_ ]{3,16}$/.test(username)) {
-    return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
-}
-    
-    edition = edition.toLowerCase();
-    if (edition !== 'java' && edition !== 'bedrock') {
-        return { success: false, message: '❌ Invalid edition. Use "java" or "bedrock".' };
+        return { success: false, message: '❌ Invalid username. Use 3-16 letters, numbers, spaces, or underscores.' };
     }
     
-    device = device.toLowerCase();
-    if (!DEVICES[device]) {
-        return { success: false, message: '❌ Invalid device. Options: mobile, pc, controller, playstation, switch' };
-    }
-    
-    region = region.toLowerCase();
-    if (!REGIONS[region]) {
-        return { success: false, message: '❌ Invalid region. Options: asia, europe, america, africa, oceania' };
-    }
-    
+    // Check if username is already taken
     if (db.ignToUser[username.toLowerCase()] && db.ignToUser[username.toLowerCase()] !== member.id) {
         return { success: false, message: '❌ This username is already verified by another member.' };
     }
     
+    // Check Java username exists (skip if you want to allow any username)
     let finalUsername = username;
-    if (edition === 'java') {
-        const mojangName = await checkJavaUsername(username);
-        if (!mojangName) {
-            return { success: false, message: '❌ Java username does not exist on Mojang.' };
-        }
-        finalUsername = mojangName;
+    const mojangName = await checkJavaUsername(username);
+    if (!mojangName) {
+        return { success: false, message: '❌ Minecraft username does not exist on Mojang. Please check spelling.' };
+    }
+    finalUsername = mojangName;
+    
+    // Change nickname to IGN
+    try { await member.setNickname(finalUsername); } catch(e) {
+        console.log(`Failed to set nickname: ${e.message}`);
     }
     
-    try { await member.setNickname(finalUsername); } catch(e) {}
-    
+    // Remove unverified role if exists
     if (unverifiedRole && member.roles.cache.has(unverifiedRole.id)) {
         await member.roles.remove(unverifiedRole);
     }
     
+    // Add verified and player roles
     await member.roles.add(verifiedRole);
     await member.roles.add(playerRole);
-    if (editionRole) await member.roles.add(editionRole);
-    if (deviceRole) await member.roles.add(deviceRole);
-    if (regionRole) await member.roles.add(regionRole);
     
-    db.users[member.id] = { username: finalUsername, edition, device, region, verifiedAt: Date.now() };
+    // Save to database
+    db.users[member.id] = { username: finalUsername, verifiedAt: Date.now() };
     db.ignToUser[finalUsername.toLowerCase()] = member.id;
     delete db.lastReminder[member.id];
     saveData();
     
+    // Log to channel
     const logChannel = guild.channels.cache.find(c => c.name === LOG_CHANNEL);
     if (logChannel) {
-        logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}** (${edition} | ${device} | ${region})`);
+        logChannel.send(`✅ **${member.user.tag}** verified as **${finalUsername}**`);
     }
     
-    // ==================== WELCOME MESSAGE ====================
+    // Send welcome message
     try {
         const welcomeEmbed = new EmbedBuilder()
             .setColor(0x2ECC71)
@@ -203,9 +166,6 @@ async function verifyMember(member, username, edition, device, region) {
                 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
                 '**📋 YOUR INFORMATION**',
                 `✦ **Username:** \`${finalUsername}\``,
-                `✦ **Edition:** ${EDITIONS[edition]}`,
-                `✦ **Device:** ${DEVICES[device]}`,
-                `✦ **Region:** ${REGIONS[region]}`,
                 '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
                 '',
                 '✅ You now have access to all channels',
@@ -222,7 +182,7 @@ async function verifyMember(member, username, edition, device, region) {
     return { success: true, message: `✅ Verified as **${finalUsername}**!` };
 }
 
-// ==================== SEND BUTTON ====================
+// ==================== SEND VERIFY BUTTON ====================
 async function sendVerifyButton(channel) {
     const guild = channel.guild;
     const serverIcon = guild.iconURL({ dynamic: true, size: 256 });
@@ -235,17 +195,14 @@ async function sendVerifyButton(channel) {
             '',
             '**📋 WHAT YOU NEED:**',
             '```',
-            '• Minecraft Username',
-            '• Game Edition (Java / Bedrock)',
-            '• Device (Mobile / PC / Controller / PlayStation / Switch)',
-            '• Region (Asia / Europe / America / Africa / Oceania)',
+            '• Minecraft Username (Java Edition only)',
             '```',
             '**⚡ WHAT YOU GET:**',
             '```',
             '• Full access to all channels',
             '• ✅ Verified role',
             '• ⚔️ Player role',
-            '• Edition, Device & Region roles',
+            '• Your nickname changed to your IGN',
             '```',
             '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━',
             '*Verification ensures a safe and secure community*'
@@ -286,7 +243,7 @@ async function notifyUnverified(guild, message) {
                     description: `Please verify your Minecraft account to access **${guild.name}**.`,
                     fields: [
                         { name: '📝 How to Verify', value: `Click the **VERIFY NOW** button in <#${VERIFY_CHANNEL_ID}>`, inline: false },
-                        { name: '✅ What You Get', value: 'Full access to all channels • PvP queue • Leaderboards', inline: false }
+                        { name: '✅ What You Get', value: 'Full access to all channels • Your IGN as nickname', inline: false }
                     ],
                     footer: { text: 'Takes less than 1 minute!' },
                     timestamp: new Date()
@@ -362,7 +319,7 @@ client.on('messageCreate', async message => {
     
     // !help
     else if (command === 'help' && isStaff) {
-        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set ADMIN • nickname\n**${PREFIX}setmod @user** - Set MODERATOR • nickname\n**${PREFIX}setjrmod @user** - Set JR MODERATOR • nickname\n**${PREFIX}sethelper @user** - Set HELPER • nickname\n**${PREFIX}setcreator @user** - Set CREATOR • nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n**${PREFIX}changedevice @user device** - Change device\n**${PREFIX}changeregion @user region** - Change region\n**${PREFIX}changeedition @user edition** - Change edition\n━━━━━━━━━━━━━━━━━━━━\n**Devices:** mobile, pc, controller, playstation, switch\n**Regions:** asia, europe, america, africa, oceania\n**Editions:** java, bedrock`;
+        const helpText = `**📋 STAFF COMMANDS**\n━━━━━━━━━━━━━━━━━━━━\n**${PREFIX}sendverify** - Send verification button\n**${PREFIX}notify** - DM reminder to unverified\n**${PREFIX}stats** - Show verification stats\n**${PREFIX}forceverify @user** - Force verify\n**${PREFIX}unverify @user** - Remove verification\n**${PREFIX}checkign @user** - Check IGN\n**${PREFIX}changeign @user newign** - Change IGN\n**${PREFIX}setadmin @user** - Set ADMIN • nickname\n**${PREFIX}setmod @user** - Set MODERATOR • nickname\n**${PREFIX}setjrmod @user** - Set JR MODERATOR • nickname\n**${PREFIX}sethelper @user** - Set HELPER • nickname\n**${PREFIX}setcreator @user** - Set CREATOR • nickname\n**${PREFIX}removestaffnick @user** - Remove staff nickname\n━━━━━━━━━━━━━━━━━━━━\n**Verification now only requires your Minecraft IGN!**`;
         await message.reply(helpText);
     }
     
@@ -412,18 +369,9 @@ client.on('messageCreate', async message => {
         await target.roles.remove(verifiedRole);
         if (unverifiedRole) await target.roles.add(unverifiedRole);
         
-        for (const [key, name] of Object.entries(EDITIONS)) {
-            const role = await getRole(guild, name);
-            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
-        }
-        for (const [key, name] of Object.entries(DEVICES)) {
-            const role = await getRole(guild, name);
-            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
-        }
-        for (const [key, name] of Object.entries(REGIONS)) {
-            const role = await getRole(guild, name);
-            if (role && target.roles.cache.has(role.id)) await target.roles.remove(role);
-        }
+        // Remove player role
+        const playerRole = await getRole(guild, PLAYER_ROLE);
+        if (playerRole && target.roles.cache.has(playerRole.id)) await target.roles.remove(playerRole);
         
         delete db.users[target.id];
         saveData();
@@ -438,73 +386,10 @@ client.on('messageCreate', async message => {
         
         const data = db.users[target.id];
         if (data) {
-            await message.reply(`**${target.user.tag}**\nIGN: ${data.username}\nEdition: ${EDITIONS[data.edition]}\nDevice: ${DEVICES[data.device]}\nRegion: ${REGIONS[data.region]}`);
+            await message.reply(`**${target.user.tag}**\nIGN: ${data.username}\nVerified: ${new Date(data.verifiedAt).toLocaleString()}`);
         } else {
             await message.reply(`${target.user.tag} is not verified.`);
         }
-    }
-    
-    // !changedevice
-    else if (command === 'changedevice' && isStaff) {
-        const target = message.mentions.members.first();
-        const newDevice = args[1];
-        if (!target || !newDevice) return message.reply('❌ Usage: !changedevice @user device');
-        
-        const data = db.users[target.id];
-        if (!data) return message.reply('❌ Member not verified.');
-        
-        const oldDeviceRole = await getRole(guild, DEVICES[data.device]);
-        const newDeviceRole = await getRole(guild, DEVICES[newDevice]);
-        
-        if (oldDeviceRole && target.roles.cache.has(oldDeviceRole.id)) await target.roles.remove(oldDeviceRole);
-        if (newDeviceRole) await target.roles.add(newDeviceRole);
-        
-        data.device = newDevice;
-        saveData();
-        
-        await message.reply(`✅ Changed ${target.user.tag}'s device to ${DEVICES[newDevice]}`);
-    }
-    
-    // !changeregion
-    else if (command === 'changeregion' && isStaff) {
-        const target = message.mentions.members.first();
-        const newRegion = args[1];
-        if (!target || !newRegion) return message.reply('❌ Usage: !changeregion @user region');
-        
-        const data = db.users[target.id];
-        if (!data) return message.reply('❌ Member not verified.');
-        
-        const oldRegionRole = await getRole(guild, REGIONS[data.region]);
-        const newRegionRole = await getRole(guild, REGIONS[newRegion]);
-        
-        if (oldRegionRole && target.roles.cache.has(oldRegionRole.id)) await target.roles.remove(oldRegionRole);
-        if (newRegionRole) await target.roles.add(newRegionRole);
-        
-        data.region = newRegion;
-        saveData();
-        
-        await message.reply(`✅ Changed ${target.user.tag}'s region to ${REGIONS[newRegion]}`);
-    }
-    
-    // !changeedition
-    else if (command === 'changeedition' && isStaff) {
-        const target = message.mentions.members.first();
-        const newEdition = args[1];
-        if (!target || !newEdition) return message.reply('❌ Usage: !changeedition @user edition');
-        
-        const data = db.users[target.id];
-        if (!data) return message.reply('❌ Member not verified.');
-        
-        const oldEditionRole = await getRole(guild, EDITIONS[data.edition]);
-        const newEditionRole = await getRole(guild, EDITIONS[newEdition]);
-        
-        if (oldEditionRole && target.roles.cache.has(oldEditionRole.id)) await target.roles.remove(oldEditionRole);
-        if (newEditionRole) await target.roles.add(newEditionRole);
-        
-        data.edition = newEdition;
-        saveData();
-        
-        await message.reply(`✅ Changed ${target.user.tag}'s edition to ${EDITIONS[newEdition]}`);
     }
     
     // !changeign
@@ -529,22 +414,28 @@ client.on('messageCreate', async message => {
             return message.reply('❌ This username is already verified by another member.');
         }
         
+        // Verify new IGN exists on Mojang
+        const mojangName = await checkJavaUsername(newIgn);
+        if (!mojangName) {
+            return message.reply('❌ Minecraft username does not exist on Mojang. Please check spelling.');
+        }
+        
         delete db.ignToUser[oldIgnLower];
-        db.ignToUser[newIgn.toLowerCase()] = target.id;
-        data.username = newIgn;
+        db.ignToUser[mojangName.toLowerCase()] = target.id;
+        data.username = mojangName;
         saveData();
         
         try {
-            await target.setNickname(newIgn);
-            await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${newIgn}**`);
+            await target.setNickname(mojangName);
+            await message.reply(`✅ Changed ${target.user.tag}'s IGN from **${oldIgn}** to **${mojangName}**`);
             
             const logChannel = message.guild.channels.cache.find(c => c.name === LOG_CHANNEL);
             if (logChannel) {
-                logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${newIgn}`);
+                logChannel.send(`🛠️ **${message.author.tag}** changed ${target.user.tag}'s IGN from ${oldIgn} to ${mojangName}`);
             }
             
             try {
-                await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${newIgn}\n\nYour nickname has been updated accordingly.`);
+                await target.send(`🔧 **Your Minecraft username has been updated!**\n━━━━━━━━━━━━━━━━━━━━\n**Old IGN:** ${oldIgn}\n**New IGN:** ${mojangName}\n\nYour nickname has been updated accordingly.`);
             } catch(e) {}
             
         } catch(e) {
@@ -552,14 +443,12 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // ==================== STAFF NICKNAME COMMANDS (FIXED - NO VERIFICATION CHECK) ====================
+    // ==================== STAFF NICKNAME COMMANDS ====================
     
-    // !setadmin @user
     else if (command === 'setadmin') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
         
-        // Get current nickname or username, remove any existing prefix
         let currentName = target.nickname || target.user.username;
         currentName = currentName.replace(/^(ADMIN • |MODERATOR • |HELPER • |JR MODERATOR • |CREATOR • )/, '');
         const newNick = `ADMIN • ${currentName}`;
@@ -578,7 +467,6 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !setmod @user
     else if (command === 'setmod') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
@@ -601,7 +489,6 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !setjrmod @user
     else if (command === 'setjrmod') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
@@ -624,7 +511,6 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !sethelper @user
     else if (command === 'sethelper') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
@@ -647,7 +533,6 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !setcreator @user
     else if (command === 'setcreator') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
@@ -670,7 +555,6 @@ client.on('messageCreate', async message => {
         }
     }
     
-    // !removestaffnick @user
     else if (command === 'removestaffnick') {
         const target = message.mentions.members.first();
         if (!target) return message.reply('❌ Please mention a user.');
@@ -717,12 +601,9 @@ client.on('interactionCreate', async interaction => {
     
     if (interaction.isModalSubmit() && interaction.customId === 'verify_modal') {
         const username = interaction.fields.getTextInputValue('username');
-        const edition = interaction.fields.getTextInputValue('edition');
-        const device = interaction.fields.getTextInputValue('device');
-        const region = interaction.fields.getTextInputValue('region');
         
         await interaction.deferReply({ flags: 64 });
-        const result = await verifyMember(interaction.member, username, edition, device, region);
+        const result = await verifyMember(interaction.member, username);
         await interaction.editReply({ content: result.message });
         return;
     }
